@@ -109,12 +109,16 @@ def prepare(a):
             raise ValueError('Bootstrap already approved or wrong state')
     elif not data['bootstrapApproved'] or data['status'] not in ['running','ready','changes_requested','blocked']:
         raise ValueError('GATE_CLOSED: bootstrap must pass before stage/final submission')
+    transport=getattr(a,'transport',None) or ('files' if a.kind=='bootstrap' else 'chat')
+    if a.kind=='bootstrap' and transport!='files': raise ValueError('Bootstrap requires real file probe; chat cannot replace it')
+    if transport=='chat' and not data.get('chatUrl'): raise ValueError('Chat review needs bound manager URL')
+    if transport=='chat' and len(Path(a.summary).read_text(encoding='utf-8'))>6000: raise ValueError('Chat summary too long; summarize progress and one decision')
     capture=io.StringIO()
     with contextlib.redirect_stdout(capture):
         h.prepare(argparse.Namespace(project=str(root),project_id=data['projectId'],summary=a.summary,files=a.files,probe=a.kind=='bootstrap'))
     info=json.loads(capture.getvalue());folder=Path(info['round'])
     req=json.loads((folder/'REQUEST.json').read_text(encoding="utf-8"))
-    req.update(kind=a.kind,stage=data['stage'],projectRoot=str(root),projectId=data['projectId'],controlHashes=controls(pm),priorStatus=data['status'])
+    req.update(kind=a.kind,stage=data['stage'],projectRoot=str(root),projectId=data['projectId'],controlHashes=controls(pm),priorStatus=data['status'],transport=transport,chatUrl=data.get('chatUrl'))
     save(folder/'REQUEST.json',req)
     prompt=(folder/'PROMPT.txt').read_text(encoding="utf-8")
     prompt+='\n这是固定项目经理会话的 '+a.kind+' 轮，阶段 '+str(data['stage'])+'。\n'
@@ -124,10 +128,19 @@ def prepare(a):
     if a.kind=='bootstrap': prompt+='本轮先确认目标完成标准、里程碑、首阶段任务和验收，再完成双向 probe。尚未允许本地开始正式目标开发。\n'
     if a.kind=='replan': prompt+='本轮为基于证据的动态重规划：说明原方案为何不适用、替代方案和最小验证，允许在章程与架构授权边界内调整阶段拆分/顺序/实现方法；不改变用户结果目标与完成标准。超出边界给出升级建议，不擅自授权。\n'
     if a.kind=='final': prompt+='经理只能判定已具备提交最终验收的条件；不得宣布项目最终完成。这是总体目标终验：逐条核对 GOAL，不把阶段完成当总体完成。DONE.json 增加 goalComplete 布尔值；全部必需目标完成才 approved 且 true。\n'
+    if transport=='chat':
+        summary=(folder/'HANDOFF.md').read_text(encoding='utf-8')
+        example={'roundId':folder.name,'status':'approved|changes_requested|blocked',
+                 'reason':'简短理由','nextTask':'最多三项，含范围','acceptance':'验收命令/条件，由开发者执行'}
+        if a.kind=='final':example['goalComplete']=False
+        prompt='你是项目经理，只判断、给方案和验收，不实施代码、不跑测试/构建、不写文件、不查大量资料。可在确有必要时读一个相关文件片段。先按以下场景和进度回答，通常 200–500 字。\n'
+        prompt+='ROUND_ID: '+folder.name+'\n项目：'+str(root)+'\n类型：'+a.kind+'；原权限不变。\n'+summary+'\n'
+        if a.kind=='consult':prompt+='这是诊断咨询，approved 只表示建议完整，不放行开发、不代替握手。\n'
+        prompt+='直接回复一个简短 JSON 代码块，无需正文重复，供本地保存真实结论；不必调用 WebCodex 写文件。字段：'+json.dumps(example,ensure_ascii=False)+'\n'
     (folder/'PROMPT.txt').write_text(prompt, encoding="utf-8")
     data.update(status='awaiting_review',activeRound=folder.name)
     update(pm,data,'准备 '+a.kind+' 审核 '+folder.name+'；被审文件冻结，等待 PM 回传。')
-    info['chatUrl']=data['chatUrl'];info['kind']=a.kind
+    info['chatUrl']=data['chatUrl'];info['kind']=a.kind;info['transport']=transport
     output(info)
 
 def accept(a):
@@ -141,10 +154,15 @@ def accept(a):
     if req['roundId']!=rid or snap['roundId']!=rid or snap['projectRoot']!=str(root) or snap['projectId']!=data['projectId']:
         raise ValueError('Wrong round/project; never consume another project review')
     if controls(pm)!=req['controlHashes']: raise ValueError('Shared goal/plan/acceptance changed during review; reconcile before proceeding')
-    capture=io.StringIO()
-    with contextlib.redirect_stdout(capture): h.verify(argparse.Namespace(round=str(folder)))
-    result=json.loads(capture.getvalue())
-    done=json.loads((folder/'outbox/DONE.json').read_text(encoding="utf-8"))
+    if req.get('transport')=='chat':
+        import chat_review
+        result=chat_review.verify(folder);done=result['decision']
+        if not (folder/'CHAT_ACCEPTED.json').exists():save(folder/'CHAT_ACCEPTED.json',{'replySha256':result['replySha256'],'recordedAt':h.now(),'producer':'local-transcription-of-web-gpt'})
+    else:
+        capture=io.StringIO()
+        with contextlib.redirect_stdout(capture): h.verify(argparse.Namespace(round=str(folder)))
+        result=json.loads(capture.getvalue())
+        done=json.loads((folder/'outbox/DONE.json').read_text(encoding='utf-8'))
     status=result['status']
     if req['kind']=='consult':
         data.update(activeRound=None,lastConsultRound=rid,status=req.get('priorStatus','blocked') if status=='approved' else 'blocked')
@@ -167,9 +185,12 @@ def accept(a):
             with (pm/'ESCALATIONS.md').open('a') as f:
                 f.write('\n连续两轮要求返工：'+rid+'；需主管纠偏后恢复，勿无限返工。\n')
     elif status=='approved': data['reworkCount']=0
-    # Preserve PM originals. These shared files always identify their source round.
-    (pm/'PLAN.md').write_text('# 当前任务（来源轮次 '+rid+'）\n\n'+(folder/'outbox/NEXT_TASK.md').read_text(encoding="utf-8"), encoding="utf-8")
-    (pm/'ACCEPTANCE.md').write_text('# 当前验收（来源轮次 '+rid+'）\n\n'+(folder/'outbox/ACCEPTANCE.md').read_text(encoding="utf-8"), encoding="utf-8")
+    # Preserve PM originals. Chat decisions are explicitly local transcriptions.
+    chat=req.get('transport')=='chat'
+    next_text=done['nextTask'] if chat else (folder/'outbox/NEXT_TASK.md').read_text(encoding='utf-8')
+    acceptance_text=done['acceptance'] if chat else (folder/'outbox/ACCEPTANCE.md').read_text(encoding='utf-8')
+    (pm/'PLAN.md').write_text('# 当前任务（来源轮次 '+rid+'）\n\n'+next_text, encoding="utf-8")
+    (pm/'ACCEPTANCE.md').write_text('# 当前验收（来源轮次 '+rid+'）\n\n'+acceptance_text, encoding="utf-8")
     if req['kind']=='final' and status=='approved': data['finalControlHashes']=controls(pm)
     data.update(lastAcceptedRound=rid,activeRound=None)
     update(pm,data,'收到 '+rid+'：'+status+'；sourceUnchanged='+str(result['sourceUnchanged']))
@@ -210,9 +231,14 @@ def developer_prompt(a):
 def final_fresh(pm,data):
     if controls(pm)!=data['finalControlHashes']: raise ValueError('Final goal/architecture/plan changed after PM approval')
     folder=pm/'rounds'/data['finalRound']
-    capture=io.StringIO()
-    with contextlib.redirect_stdout(capture): h.verify(argparse.Namespace(round=str(folder)))
-    result=json.loads(capture.getvalue())
+    req=json.loads((folder/'REQUEST.json').read_text(encoding='utf-8'))
+    if req.get('transport')=='chat':
+        import chat_review
+        result=chat_review.verify(folder)
+    else:
+        capture=io.StringIO()
+        with contextlib.redirect_stdout(capture): h.verify(argparse.Namespace(round=str(folder)))
+        result=json.loads(capture.getvalue())
     if not result['actionable']: raise ValueError('Final code evidence no longer current')
     return result
 
@@ -381,7 +407,7 @@ def main():
         if name=='bind': q.add_argument('--chat-url',required=True)
         if name=='prepare':
             q.add_argument('--kind',choices=['bootstrap','stage','replan','final','consult'],required=True)
-            q.add_argument('--summary',required=True);q.add_argument('--files',nargs='+',required=True)
+            q.add_argument('--summary',required=True);q.add_argument('--files',nargs='+',required=True);q.add_argument('--transport',choices=['files','chat'])
         if name=='blocked':q.add_argument('--reason',required=True)
         if name=='supervisor_review':
             q.add_argument('--report',required=True);q.add_argument('--decision',choices=['approved','changes_requested'],required=True)

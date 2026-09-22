@@ -1,4 +1,6 @@
-# 交接协议 v1
+# 文件交接协议（bootstrap / 显式 files）
+
+日常阶段默认 chat，见 chat-review.md；以下 outbox 要求只适用于文件模式，不要求网页经理每次写文件。
 
 每轮存放于目标项目 .gpt-pm/rounds/<round-id>/：
 - HANDOFF.md：本地开发者事实报告；属于待核验材料。

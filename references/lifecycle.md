@@ -51,7 +51,8 @@ python3 "$SKILL/scripts/project.py" begin --project "$PROJECT"
 # 按 PLAN 和 ACCEPTANCE 实施、验证、审查；生成本轮报告
 python3 "$SKILL/scripts/project.py" prepare --project "$PROJECT" --kind stage --summary "$REPORT" --files src tests README.md
 python3 "$SKILL/scripts/chrome_chat.py" send --tab "$TAB_ID" --expected-url "$CHAT_URL" --prompt "$ROUND/PROMPT.txt" --receipt "$ROUND/browser-receipt.json"
-# 等待 PM 完成；不要边审边改，也不要重复发送
+# 等待 PM 完成；不要边审边改。默认 chat：抓取真实回复后再 accept
+python3 "$SKILL/scripts/chat_review.py" --tab "$TAB_ID" --round "$ROUND"
 python3 "$SKILL/scripts/project.py" accept --project "$PROJECT"
 ```
 
@@ -63,7 +64,7 @@ accepted/verified 不等于 approved。读取 JSON 状态；approved 才推进�
 
 ```sh
 python3 "$SKILL/scripts/project.py" prepare --project "$PROJECT" --kind final --summary "$FINAL_REPORT" --files src tests README.md
-# 同一 PM 会话发送一次；完成后 accept
+# 同一 PM 会话发送；默认 chat，完整回复后先用 chat_review.py 抓取再 accept
 python3 "$SKILL/scripts/project.py" accept --project "$PROJECT"
 python3 "$SKILL/scripts/project.py" status --project "$PROJECT"
 ```

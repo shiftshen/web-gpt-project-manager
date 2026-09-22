@@ -51,3 +51,7 @@ python3 scripts/project.py migrate --project PROJECT --manager-idle --developer-
 | 审核期间源码变化 | SNAPSHOT 与当前文件哈希、新增/删除文件、控制文件哈希 | 拒绝 stale approved；不把源码改回以迎合旧审核。冻结新版本，经理停止后 recover，保留原审核并新快照重审 |
 
 被平台安全检查拒绝的动作不能通过上述恢复路径重新包装执行。
+
+## 日常聊天恢复
+
+原轮按 REQUEST.transport 恢复，不能在 files/chat 之间中途换协议。chat 回复不完整或无明确结论时，在原网页简短追问，附 FOLLOWUP_FOR: roundId；不要求经理补写 outbox。真实完整回复用 chat_review.py 抓取后 accept；还在正常生成就耐心等，重要错误允许必要打断并保留中间记录。被打断的半答复不是批准。

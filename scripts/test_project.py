@@ -21,7 +21,7 @@ class ProjectTests(unittest.TestCase):
         return json.loads(capture.getvalue()) if capture.getvalue() else None
 
     def prepare(self,kind='bootstrap'):
-        result=self.call(p.prepare,kind=kind,summary=str(self.report),files=['src'])
+        result=self.call(p.prepare,kind=kind,summary=str(self.report),files=['src'],transport='files')
         return Path(result['round'])
 
     def pm(self,folder,status='approved',complete=None):
