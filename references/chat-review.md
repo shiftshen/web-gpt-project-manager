@@ -13,7 +13,9 @@
 python3 "$SKILL/scripts/project.py" prepare --project "$PROJECT" --kind stage --summary "$REPORT" --files src tests review-evidence
 # --transport 默认 chat（bootstrap 默认 files）；用原会话发送 PROMPT.txt
 python3 "$SKILL/scripts/chrome_chat.py" send --tab "$TAB_ID" --expected-url "$CHAT_URL" --prompt "$ROUND/PROMPT.txt" --receipt "$ROUND/browser-receipt.json"
-# 等待本轮完整回复后，抓取实际可见消息，不手工创造经理回复
+# 等待完整回复，确认精确标签可见，必要时关闭已核实的旧工具面板
+python3 "$SKILL/scripts/chrome_chat.py" focus --tab "$TAB_ID"
+# 抓取实际可见消息，不手工创造经理回复
 python3 "$SKILL/scripts/chat_review.py" --tab "$TAB_ID" --round "$ROUND"
 python3 "$SKILL/scripts/project.py" accept --project "$PROJECT"
 ```

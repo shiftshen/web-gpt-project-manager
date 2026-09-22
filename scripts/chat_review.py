@@ -12,7 +12,7 @@ def parse_reply(text,req):
         try: obj=json.loads(block)
         except json.JSONDecodeError:continue
         if isinstance(obj,dict) and obj.get('roundId')==req['roundId']:decisions.append(obj)
-    if len(decisions)!=1:raise ValueError('Need one explicit manager decision for this round; ask a brief follow-up, do not invent it')
+    if len(decisions)!=1:raise ValueError('Need one explicit manager decision for this round; first inspect visible tab/overlay and wait, then ask a brief follow-up if genuinely missing')
     d=decisions[0]
     if d.get('status') not in ['approved','changes_requested','blocked']:raise ValueError('Invalid manager decision')
     for key in ['reason','nextTask','acceptance']:

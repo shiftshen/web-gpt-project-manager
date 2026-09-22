@@ -36,6 +36,22 @@ end repeat
 end repeat
 return resultText
 end tell''')
+def focus(tab):
+    return apple(f'''tell application "Google Chrome"
+repeat with w in windows
+repeat with i from 1 to count of tabs of w
+if (id of tab i of w as text) is "{int(tab)}" then
+if URL of tab i of w does not start with "https://chatgpt.com/" then error "Wrong origin"
+set active tab index of w to i
+set index of w to 1
+activate
+return "Target ChatGPT tab visible"
+end if
+end repeat
+end repeat
+error "Target tab missing"
+end tell''')
+
 def send(a):
     text=Path(a.prompt).read_text(encoding="utf-8")
     if len(text.encode())>24000: raise ValueError("Prompt too large")
@@ -82,11 +98,13 @@ def main():
     sys.stdout.reconfigure(errors="backslashreplace")
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest="action",required=True)
     sub.add_parser("list");sub.add_parser("new")
+    f=sub.add_parser("focus");f.add_argument("--tab",type=int,required=True)
     r=sub.add_parser("read");r.add_argument("--tab",type=int,required=True)
     s=sub.add_parser("send");s.add_argument("--tab",type=int,required=True);s.add_argument("--prompt",required=True);s.add_argument("--receipt",required=True);s.add_argument("--expected-url")
     a=p.parse_args()
     try:
         if a.action=="list": print(listing())
+        elif a.action=="focus": print(focus(a.tab))
         elif a.action=="new":
             print(apple('''tell application "Google Chrome"
 if (count of windows) is 0 then make new window
