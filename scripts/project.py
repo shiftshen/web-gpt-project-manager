@@ -328,7 +328,7 @@ def cancel_unsent(a):
     if data.get('lastAcceptedRound')==rid: raise ValueError('Cannot cancel accepted round')
     if (folder/'CANCELLED.json').exists(): raise ValueError('Round already cancelled; preserve audit')
     # An empty outbox and absent receipt alone do NOT prove that a message was unsent.
-    if any((folder/'outbox').iterdir()): raise ValueError('PM output exists; use diagnosis/recover, not cancel_unsent')
+    if (folder/'CHAT_REPLY.json').exists() or any((folder/'outbox').iterdir()): raise ValueError('PM output exists; use diagnosis/recover, not cancel_unsent')
     for receipt in folder.rglob('*.json'):
         obj=json.loads(receipt.read_text(encoding='utf-8'))
         if isinstance(obj,dict) and (obj.get('status') in ['intent','submitted','uncertain'] or obj.get('state') in ['intent','submitted','uncertain']):

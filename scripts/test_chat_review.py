@@ -31,6 +31,11 @@ class ChatTests(unittest.TestCase):
         self.assertTrue((folder/'CHAT_ACCEPTED.json').exists())
         self.assertIn('bounded implementation',(self.root/'.gpt-pm/PLAN.md').read_text(encoding='utf-8'))
 
+    def test_captured_chat_cannot_be_cancelled_as_unsent(self):
+        self.bootstrap();folder=self.chat_round();self.capture(folder)
+        with self.assertRaisesRegex(ValueError,'output'):
+            self.call(p.cancel_unsent,round=folder.name,reason='fixture',manager_idle=True,evidence=str(self.report))
+
     def test_chat_cannot_replace_bootstrap(self):
         with self.assertRaisesRegex(ValueError,'probe'):self.chat_round('bootstrap')
 
