@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""Per-project PM lifecycle. No model calls, scheduler, Git writes, or browser messages."""
+import argparse, contextlib, hashlib, io, json, re, sys
+from pathlib import Path
+import handoff as h
+
+CHAT = re.compile(r'^https://chatgpt\.com/c/[A-Za-z0-9-]+$')
+CONTROL = ['GOAL.md','CHARTER.md','ARCHITECTURE.md','MILESTONES.md','PLAN.md','ACCEPTANCE.md','PM_INSTRUCTIONS.md']
+
+def save(path,data):
+    temp=path.with_name(path.name+'.tmp')
+    temp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n', encoding="utf-8")
+    temp.replace(path)
+
+def paths(project):
+    root=Path(project).resolve(strict=True)
+    pm=root/'.gpt-pm'
+    if pm.is_symlink(): raise ValueError('Project PM directory must not be symlink')
+    return root,pm
+
+def state(project):
+    root,pm=paths(project)
+    p=pm/'PROJECT.json'
+    if p.is_symlink(): raise ValueError('PROJECT.json must not be symlink')
+    data=json.loads(p.read_text(encoding="utf-8"))
+    if data['projectRoot']!=str(root): raise ValueError('Project root mismatch; do not reuse another project state')
+    return root,pm,data
+
+def output(data): print(json.dumps(data,ensure_ascii=False,indent=2))
+def update(pm,data,event):
+    data['updatedAt']=h.now()
+    save(pm/'PROJECT.json',data)
+    (pm/'STATUS.md').write_text('# 当前阶段状态\n\n'+json.dumps({k:data.get(k) for k in ['status','stage','chatUrl','activeRound','lastAcceptedRound','bootstrapApproved','updatedAt']},ensure_ascii=False,indent=2)+'\n', encoding="utf-8")
+    with (pm/'DECISIONS.md').open('a') as f: f.write('\n- '+data['updatedAt']+' '+event+'\n')
+
+def init(a):
+    root,pm=paths(a.project)
+    goal=Path(a.goal_file).read_text(encoding="utf-8").strip()
+    if not goal: raise ValueError('Goal must be explicit and nonempty')
+    if a.chat_url and not CHAT.fullmatch(a.chat_url): raise ValueError('Expected exact ChatGPT /c/ conversation URL')
+    if (pm/'PROJECT.json').exists():
+        _,_,data=state(a.project)
+        if data['projectId']!=a.project_id or (pm/'GOAL.md').read_text(encoding="utf-8").strip()!=goal:
+            raise ValueError('Existing project goal/ID differs; preserve it and reconcile with the user')
+        output(data);return
+    pm.mkdir(exist_ok=True)
+    contents={'GOAL.md':goal+'\n','PLAN.md':'# 阶段计划\n\n尚未通过项目经理启动审核。先验证沟通、确认里程碑和首阶段。\n',
+              'ACCEPTANCE.md':'# 验收标准\n\n依据 GOAL，由项目经理在 bootstrap 轮写回明确标准；不得提前声称已验收。\n',
+              'STATUS.md':'# 初始化\n','DECISIONS.md':'# 共同决策记录\n',
+              'PM_INSTRUCTIONS.md':(Path(__file__).resolve().parent.parent/'references/pm.md').read_text(encoding="utf-8")}
+    templates=Path(__file__).resolve().parent.parent/'templates'
+    for name in ['CHARTER.md','ARCHITECTURE.md','MILESTONES.md','PROGRESS.md','ESCALATIONS.md','FINAL_REPORT.md','DEVELOPER_CONTRACT.md']:
+        contents[name]=(templates/name).read_text(encoding="utf-8")
+    for name in contents:
+        if (pm/name).exists() or (pm/name).is_symlink(): raise ValueError('Refusing overwrite existing shared file: '+name)
+    for name,content in contents.items(): (pm/name).write_text(content, encoding="utf-8")
+    for name in ['reports','evidence','supervisor','owner']:
+        (pm/name).mkdir(exist_ok=True)
+    (pm/'reports/STAGE_REPORT_TEMPLATE.md').write_text((templates/'STAGE_REPORT.md').read_text(encoding="utf-8"), encoding="utf-8")
+    data={'schemaVersion':3,'projectRoot':str(root),'projectId':a.project_id,'chatUrl':a.chat_url,
+          'status':'initializing','stage':0,'planRevision':1,'bootstrapApproved':False,'activeRound':None,
+          'lastAcceptedRound':None,'supervisorApproved':False,'ownerAccepted':False,'createdAt':h.now()}
+    update(pm,data,'初始化固定网页项目经理；尚未启动目标开发。')
+    output(data)
+
+def bind(a):
+    _,pm,data=state(a.project)
+    if not CHAT.fullmatch(a.chat_url): raise ValueError('Expected exact ChatGPT /c/ conversation URL')
+    if data.get('chatUrl') and data['chatUrl']!=a.chat_url:
+        raise ValueError('Different PM already bound; do not silently replace project manager')
+    data['chatUrl']=a.chat_url
+    update(pm,data,'绑定固定 PM 会话 '+a.chat_url)
+    output(data)
+
+def controls(pm):
+    result={}
+    for name in CONTROL:
+        p=pm/name
+        if p.is_symlink(): raise ValueError('Shared control file must not be symlink: '+name)
+        result[name]=h.sha(p.read_bytes())
+    return result
+
+def begin(a):
+    _,pm,data=state(a.project)
+    if not data['bootstrapApproved'] or data['status'] not in ['ready','changes_requested'] or data['activeRound']:
+        raise ValueError('GATE_CLOSED: complete bootstrap/stage review first')
+    if data['status']=='ready': data['stage']+=1
+    data['status']='running'
+    update(pm,data,'开始阶段 '+str(data['stage'])+'；按共同 PLAN/ACCEPTANCE 实施。')
+    output(data)
+
+def prepare(a):
+    root,pm,data=state(a.project)
+    if data['activeRound']: raise ValueError('Pending round exists; resume it instead of duplicate submission')
+    if a.kind=='bootstrap':
+        if data['bootstrapApproved'] or data['status'] not in ['initializing','blocked','changes_requested']:
+            raise ValueError('Bootstrap already approved or wrong state')
+    elif not data['bootstrapApproved'] or data['status'] not in ['running','ready','changes_requested','blocked']:
+        raise ValueError('GATE_CLOSED: bootstrap must pass before stage/final submission')
+    capture=io.StringIO()
+    with contextlib.redirect_stdout(capture):
+        h.prepare(argparse.Namespace(project=str(root),project_id=data['projectId'],summary=a.summary,files=a.files,probe=a.kind=='bootstrap'))
+    info=json.loads(capture.getvalue());folder=Path(info['round'])
+    req=json.loads((folder/'REQUEST.json').read_text(encoding="utf-8"))
+    req.update(kind=a.kind,stage=data['stage'],projectRoot=str(root),projectId=data['projectId'],controlHashes=controls(pm))
+    save(folder/'REQUEST.json',req)
+    prompt=(folder/'PROMPT.txt').read_text(encoding="utf-8")
+    prompt+='\n这是固定项目经理会话的 '+a.kind+' 轮，阶段 '+str(data['stage'])+'。\n'
+    prompt+='先读取 '+str(pm/'PM_INSTRUCTIONS.md')+' 和 GOAL.md、CHARTER.md、ARCHITECTURE.md、MILESTONES.md、PLAN.md、ACCEPTANCE.md、STATUS.md、DECISIONS.md。按 REQUEST.controlHashes 核验共同控制文件。\n'
+    prompt+='当前绑定会话：'+str(data['chatUrl'] or '首次启动，发送后本地绑定真实会话URL')+'；后续阶段沿用本会话。\n'
+    if a.kind=='bootstrap': prompt+='本轮先确认目标完成标准、里程碑、首阶段任务和验收，再完成双向 probe。尚未允许本地开始正式目标开发。\n'
+    if a.kind=='replan': prompt+='本轮为基于证据的动态重规划：说明原方案为何不适用、替代方案和最小验证，允许在章程与架构授权边界内调整阶段拆分/顺序/实现方法；不改变用户结果目标与完成标准。超出边界给出升级建议，不擅自授权。\n'
+    if a.kind=='final': prompt+='经理只能判定已具备提交最终验收的条件；不得宣布项目最终完成。这是总体目标终验：逐条核对 GOAL，不把阶段完成当总体完成。DONE.json 增加 goalComplete 布尔值；全部必需目标完成才 approved 且 true。\n'
+    (folder/'PROMPT.txt').write_text(prompt, encoding="utf-8")
+    data.update(status='awaiting_review',activeRound=folder.name)
+    update(pm,data,'准备 '+a.kind+' 审核 '+folder.name+'；被审文件冻结，等待 PM 回传。')
+    info['chatUrl']=data['chatUrl'];info['kind']=a.kind
+    output(info)
+
+def accept(a):
+    root,pm,data=state(a.project)
+    rid=data.get('activeRound')
+    if not rid: raise ValueError('No pending round')
+    if not data.get('chatUrl'): raise ValueError('Bind actual browser conversation URL first')
+    folder=pm/'rounds'/rid
+    req=json.loads((folder/'REQUEST.json').read_text(encoding="utf-8"))
+    snap=json.loads((folder/'SNAPSHOT.json').read_text(encoding="utf-8"))
+    if req['roundId']!=rid or snap['roundId']!=rid or snap['projectRoot']!=str(root) or snap['projectId']!=data['projectId']:
+        raise ValueError('Wrong round/project; never consume another project review')
+    if controls(pm)!=req['controlHashes']: raise ValueError('Shared goal/plan/acceptance changed during review; reconcile before proceeding')
+    capture=io.StringIO()
+    with contextlib.redirect_stdout(capture): h.verify(argparse.Namespace(round=str(folder)))
+    result=json.loads(capture.getvalue())
+    done=json.loads((folder/'outbox/DONE.json').read_text(encoding="utf-8"))
+    status=result['status']
+    if req['kind']=='final' and status=='approved' and done.get('goalComplete') is not True:
+        raise ValueError('Final approval requires explicit goalComplete=true and human-readable evidence')
+    if status=='approved':
+        if req['kind']=='replan': data['planRevision']=data.get('planRevision',1)+1
+        if req['kind']=='bootstrap':
+            if not result['probeVerified']: raise ValueError('Bootstrap probe required')
+            data['bootstrapApproved']=True
+        data['status']='supervisor_review_pending' if req['kind']=='final' else 'ready'
+        if req['kind']=='final': data['finalRound']=rid
+    else: data['status']=status
+    if status=='changes_requested':
+        data['reworkCount']=data.get('reworkCount',0)+1
+        if data['reworkCount']>=2:
+            data['status']='escalated'
+            with (pm/'ESCALATIONS.md').open('a') as f:
+                f.write('\n连续两轮要求返工：'+rid+'；需主管纠偏后恢复，勿无限返工。\n')
+    elif status=='approved': data['reworkCount']=0
+    # Preserve PM originals. These shared files always identify their source round.
+    (pm/'PLAN.md').write_text('# 当前任务（来源轮次 '+rid+'）\n\n'+(folder/'outbox/NEXT_TASK.md').read_text(encoding="utf-8"), encoding="utf-8")
+    (pm/'ACCEPTANCE.md').write_text('# 当前验收（来源轮次 '+rid+'）\n\n'+(folder/'outbox/ACCEPTANCE.md').read_text(encoding="utf-8"), encoding="utf-8")
+    if req['kind']=='final' and status=='approved': data['finalControlHashes']=controls(pm)
+    data.update(lastAcceptedRound=rid,activeRound=None)
+    update(pm,data,'收到 '+rid+'：'+status+'；sourceUnchanged='+str(result['sourceUnchanged']))
+    output({'state':data,'review':result})
+
+def blocked(a):
+    _,pm,data=state(a.project)
+    if not a.reason.strip(): raise ValueError('Concrete blocked reason required')
+    data['status']='blocked'
+    # Do not discard a possibly still running PM round or permit blind resubmission.
+    update(pm,data,'阻塞（未通过审核，保留当前轮次）：'+a.reason)
+    output(data)
+
+def developer_prompt(a):
+    root,pm,data=state(a.project)
+    if not data.get('bootstrapApproved') or not data.get('chatUrl'):
+        raise ValueError('Cannot issue developer launch prompt before verified bootstrap')
+    if data['status'] not in ['ready','running','changes_requested']:
+        raise ValueError('Project is not released for development')
+    template=(Path(__file__).resolve().parent.parent/'templates/DEVELOPER_PROMPT.md').read_text(encoding="utf-8")
+    text=template.replace('{{PROJECT_ROOT}}',str(root)).replace('{{PROJECT_ID}}',data['projectId']).replace('{{CHAT_URL}}',data['chatUrl'])
+    (pm/'DEVELOPER_PROMPT.md').write_text(text, encoding="utf-8")
+    output({'projectRoot':str(root),'managerUrl':data['chatUrl'],'developerPrompt':str(pm/'DEVELOPER_PROMPT.md'),'status':data['status']})
+
+def final_fresh(pm,data):
+    if controls(pm)!=data['finalControlHashes']: raise ValueError('Final goal/architecture/plan changed after PM approval')
+    folder=pm/'rounds'/data['finalRound']
+    capture=io.StringIO()
+    with contextlib.redirect_stdout(capture): h.verify(argparse.Namespace(round=str(folder)))
+    result=json.loads(capture.getvalue())
+    if not result['actionable']: raise ValueError('Final code evidence no longer current')
+    return result
+
+def supervisor_review(a):
+    root,pm,data=state(a.project)
+    if data['status'] not in ['supervisor_review_pending','escalated']:
+        raise ValueError('Supervisor review only at escalation/final gate')
+    report=Path(a.report).read_text(encoding="utf-8").strip()
+    if not report: raise ValueError('Independent supervisor report required')
+    final=data['status']=='supervisor_review_pending'
+    if final and a.decision=='approved': final_fresh(pm,data)
+    target=pm/'supervisor'/('review-'+h.now().replace(':','-')+'.md')
+    target.write_text(report+'\n', encoding="utf-8")
+    if final and a.decision=='approved':
+        data.update(status='owner_acceptance_pending',supervisorApproved=True,supervisorReport=str(target),supervisorReportSha256=h.sha(target.read_bytes()))
+    else:
+        data.update(status='changes_requested',supervisorApproved=False,reworkCount=0)
+    update(pm,data,'主管独立审查：'+a.decision+'；报告 '+str(target.relative_to(pm)))
+    output(data)
+
+def owner_confirm(a):
+    _,pm,data=state(a.project)
+    if data['status']!='owner_acceptance_pending' or not data.get('supervisorApproved'):
+        raise ValueError('Owner confirmation requires supervisor approval first')
+    final_fresh(pm,data)
+    if h.sha(Path(data['supervisorReport']).read_bytes())!=data['supervisorReportSha256']:
+        raise ValueError('Supervisor report changed')
+    confirmation=Path(a.confirmation).read_text(encoding="utf-8").strip()
+    if not confirmation: raise ValueError('Actual explicit owner confirmation must be recorded')
+    target=pm/'owner/ACCEPTANCE.md'
+    target.write_text(confirmation+'\n', encoding="utf-8")
+    data.update(status='complete',ownerAccepted=True,ownerConfirmation=str(target))
+    update(pm,data,'记录项目主人的明确验收确认，项目完成。')
+    output(data)
+
+def recover(a):
+    _,pm,data=state(a.project)
+    if not a.manager_idle: raise ValueError('Confirm actual browser manager has stopped before recovery')
+    if data['status'] not in ['blocked','awaiting_review']:
+        raise ValueError('Recovery applies only to blocked/pending rounds')
+    evidence=Path(a.evidence).read_text(encoding="utf-8").strip()
+    if not evidence: raise ValueError('Actual diagnosis and resolved-condition evidence required')
+    rid=data.get('activeRound')
+    record={'recordedAt':h.now(),'retiredRound':rid,'evidence':evidence,'approved':False}
+    target=pm/'reports'/('recovery-'+h.now().replace(':','-')+'.json')
+    save(target,record)
+    data.update(activeRound=None,status='changes_requested' if data['bootstrapApproved'] else 'initializing')
+    update(pm,data,'恢复记录 '+str(target.relative_to(pm))+'；旧轮保留且未批准，必须重新提交有效快照。')
+    output(data)
+
+def replace_manager(a):
+    _,pm,data=state(a.project)
+    if not a.manager_idle or data.get('activeRound'):
+        raise ValueError('Retire pending work before explicit PM replacement')
+    if not CHAT.fullmatch(a.chat_url): raise ValueError('Expected exact ChatGPT /c/ URL')
+    if data['status']=='complete':raise ValueError('Completed project requires a new authorized goal')
+    evidence=Path(a.evidence).read_text(encoding="utf-8").strip()
+    if not evidence:raise ValueError('Supervisor handover record required')
+    target=pm/'supervisor'/('handover-'+h.now().replace(':','-')+'.md')
+    target.write_text(evidence+'\n', encoding="utf-8")
+    old=data.get('chatUrl')
+    data.update(chatUrl=a.chat_url,bootstrapApproved=False,status='initializing')
+    update(pm,data,'主管迁移经理 '+str(old)+' -> '+a.chat_url+'；需重新 bootstrap，保留全部历史。')
+    output(data)
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__);s=p.add_subparsers(dest='action',required=True)
+    for name in ['init','bind','begin','prepare','accept','status','blocked','developer_prompt','supervisor_review','owner_confirm','recover','replace_manager']:
+        q=s.add_parser(name);q.add_argument('--project',required=True)
+        if name=='init': q.add_argument('--project-id',required=True);q.add_argument('--goal-file',required=True);q.add_argument('--chat-url')
+        if name=='bind': q.add_argument('--chat-url',required=True)
+        if name=='prepare':
+            q.add_argument('--kind',choices=['bootstrap','stage','replan','final'],required=True)
+            q.add_argument('--summary',required=True);q.add_argument('--files',nargs='+',required=True)
+        if name=='blocked':q.add_argument('--reason',required=True)
+        if name=='supervisor_review':
+            q.add_argument('--report',required=True);q.add_argument('--decision',choices=['approved','changes_requested'],required=True)
+        if name=='owner_confirm':q.add_argument('--confirmation',required=True)
+        if name in ['recover','replace_manager']:
+            q.add_argument('--evidence',required=True);q.add_argument('--manager-idle',action='store_true',required=True)
+        if name=='replace_manager':q.add_argument('--chat-url',required=True)
+    a=p.parse_args()
+    try:
+        if a.action=='status': output(state(a.project)[2])
+        else: globals()[a.action](a)
+    except (ValueError,OSError,KeyError,TypeError) as e:
+        print(json.dumps({'ok':False,'error':str(e)},ensure_ascii=False),file=sys.stderr);sys.exit(2)
+if __name__=='__main__':main()
