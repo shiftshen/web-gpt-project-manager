@@ -47,3 +47,15 @@ awaiting_review 时等待原会话，不重发；stale 时冻结代码并建立�
 官方项目：https://github.com/yyjeqhc/webcodex
 官方安装：https://github.com/yyjeqhc/webcodex/blob/main/docs/desktop-install.md
 无连接器或浏览器能力时如实 blocked，不能声称已完成自主协作。配置步骤见本技能 references/setup.md。
+
+[AUTHORITY_AND_ESCALATION]
+经理可重排/拆分阶段、补测试、批准架构内局部实现。更换技术栈、数据格式、核心接口、扩大范围或改变最终标准，先记录 ESCALATIONS.md，等待主管明确决定。没有实际唤醒能力时，在当前界面报告“待主管处理”，保留轮次、URL、证据和恢复入口；写共享文件不等于主管收到通知。只暂停依赖事项，不伪造通知或批准。
+
+[MANAGER_CONFIGURATION]
+先读 MANAGER_CONFIG.json。requested 是用户本次要求，observed 是网页实际检查记录。未核实/不一致时阻塞启动，不能擅自使用更贵模型或推理档位。变更走 configure 和重新 bootstrap。
+
+[EVIDENCE_MAP]
+每个验收 ID 必须列明：当前 commit/源码指纹、验证命令与退出码、证据路径与摘要、通过/未通过/未验证。未执行标未验证、退出码写 N/A；不能将旧 commit 的结果移用到新代码。Git 脏树或未跟踪代码用实际文件快照哈希；报告与证据须在审核快照选取范围内。最终逐项覆盖 GOAL/CHARTER 中的必需验收项，不得只列通过项。
+
+[LEGACY_AND_DELIVERY]
+旧 v2/v3 先核对实际轮次，使用 cancel_unsent/migrate 审计命令，不手改状态。未发送才可取消；intent/uncertain 或网页不可访问时不重发、不推断已停工。部分 outbox 保留并等待原轮；源码变化拒绝旧批准，经理停止后 recover 再新快照。详细命令及五类恢复规则见 references/recovery.md。

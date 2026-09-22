@@ -12,6 +12,7 @@ class ProjectTests(unittest.TestCase):
         self.goal=self.base/'goal.md';self.goal.write_text('Implement the requested behavior and verify it. No publishing.', encoding="utf-8")
         self.report=self.root/'report.md';self.report.write_text('Synthetic test report', encoding="utf-8")
         self.call(p.init,project=str(self.root),project_id='project-a',goal_file=str(self.goal),chat_url='https://chatgpt.com/c/pm-a')
+        self.call(p.configure,manager_idle=True,evidence=str(self.report),mode='Work',model='GPT-6',reasoning='default',observed_mode='Work',observed_model='GPT-6',observed_reasoning='default')
 
     def call(self,fn,**kw):
         kw.setdefault('project',str(self.root))

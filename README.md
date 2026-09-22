@@ -77,3 +77,7 @@ CI 检查 Linux、macOS、Windows 的纯协议/状态逻辑；**不是三平台�
 感谢 **[yyjeqhc](https://github.com/yyjeqhc)** 与 **[WebCodex 贡献者](https://github.com/yyjeqhc/webcodex)** 提供云端 AI 访问本机开发环境的能力。我们独立维护协作技能，不是 WebCodex 或 OpenAI 官方产品。详见 [CREDITS.md](CREDITS.md)。
 
 MIT License。发布包不含个人会话、业务代码、账号配置或 WebCodex 凭据。
+
+## v0.2.0 协议收尾
+
+新增可审计 cancel_unsent / migrate 与独立 requested/observed 模型配置；明确架构权限、升级通知、五类恢复路径和逐项验收证据索引。旧项目先读 [迁移说明](references/recovery.md)，配置与权限见 [说明](references/authority.md)。迁移保留全部历史并重新握手，不能继承旧完成状态。

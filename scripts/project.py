@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Per-project PM lifecycle. No model calls, scheduler, Git writes, or browser messages."""
-import argparse, contextlib, hashlib, io, json, re, sys
+import argparse, contextlib, hashlib, io, json, re, sys, shutil, uuid
 from pathlib import Path
 import handoff as h
 
 CHAT = re.compile(r'^https://chatgpt\.com/c/[A-Za-z0-9-]+$')
-CONTROL = ['GOAL.md','CHARTER.md','ARCHITECTURE.md','MILESTONES.md','PLAN.md','ACCEPTANCE.md','PM_INSTRUCTIONS.md']
+CONTROL = ['GOAL.md','CHARTER.md','ARCHITECTURE.md','MILESTONES.md','PLAN.md','ACCEPTANCE.md','PM_INSTRUCTIONS.md','MANAGER_CONFIG.json']
 
 def save(path,data):
     temp=path.with_name(path.name+'.tmp')
@@ -57,9 +57,10 @@ def init(a):
     for name in ['reports','evidence','supervisor','owner']:
         (pm/name).mkdir(exist_ok=True)
     (pm/'reports/STAGE_REPORT_TEMPLATE.md').write_text((templates/'STAGE_REPORT.md').read_text(encoding="utf-8"), encoding="utf-8")
-    data={'schemaVersion':3,'projectRoot':str(root),'projectId':a.project_id,'chatUrl':a.chat_url,
+    data={'schemaVersion':4,'projectRoot':str(root),'projectId':a.project_id,'chatUrl':a.chat_url,
           'status':'initializing','stage':0,'planRevision':1,'bootstrapApproved':False,'activeRound':None,
           'lastAcceptedRound':None,'supervisorApproved':False,'ownerAccepted':False,'createdAt':h.now()}
+    save(pm/'MANAGER_CONFIG.json',default_config())
     update(pm,data,'初始化固定网页项目经理；尚未启动目标开发。')
     output(data)
 
@@ -82,6 +83,7 @@ def controls(pm):
 
 def begin(a):
     _,pm,data=state(a.project)
+    if data.get('schemaVersion')!=4: raise ValueError('Migrate legacy project before new work')
     if not data['bootstrapApproved'] or data['status'] not in ['ready','changes_requested'] or data['activeRound']:
         raise ValueError('GATE_CLOSED: complete bootstrap/stage review first')
     if data['status']=='ready': data['stage']+=1
@@ -91,7 +93,12 @@ def begin(a):
 
 def prepare(a):
     root,pm,data=state(a.project)
+    if data.get('schemaVersion')!=4: raise ValueError('Migrate legacy project before preparing new rounds')
     if data['activeRound']: raise ValueError('Pending round exists; resume it instead of duplicate submission')
+    config=json.loads((pm/'MANAGER_CONFIG.json').read_text(encoding='utf-8'))
+    observed=config.get('observed') or {}
+    if any(not observed.get(k) or observed.get(k) in ['unknown','unverified'] or observed.get(k)!=v for k,v in config['requested'].items()) or not observed.get('evidence'):
+        raise ValueError('Manager configuration not verified/matched; inspect actual UI and configure first')
     if a.kind=='bootstrap':
         if data['bootstrapApproved'] or data['status'] not in ['initializing','blocked','changes_requested']:
             raise ValueError('Bootstrap already approved or wrong state')
@@ -106,7 +113,7 @@ def prepare(a):
     save(folder/'REQUEST.json',req)
     prompt=(folder/'PROMPT.txt').read_text(encoding="utf-8")
     prompt+='\n这是固定项目经理会话的 '+a.kind+' 轮，阶段 '+str(data['stage'])+'。\n'
-    prompt+='先读取 '+str(pm/'PM_INSTRUCTIONS.md')+' 和 GOAL.md、CHARTER.md、ARCHITECTURE.md、MILESTONES.md、PLAN.md、ACCEPTANCE.md、STATUS.md、DECISIONS.md。按 REQUEST.controlHashes 核验共同控制文件。\n'
+    prompt+='先读取 '+str(pm/'PM_INSTRUCTIONS.md')+' 和 MANAGER_CONFIG.json（requested 是用户选择，observed 是实际 UI 证据；不一致或未核实必须阻塞，不擅自升级）、GOAL.md、CHARTER.md、ARCHITECTURE.md、MILESTONES.md、PLAN.md、ACCEPTANCE.md、STATUS.md、DECISIONS.md。按 REQUEST.controlHashes 核验共同控制文件。\n'
     prompt+='当前绑定会话：'+str(data['chatUrl'] or '首次启动，发送后本地绑定真实会话URL')+'；后续阶段沿用本会话。\n'
     if a.kind=='bootstrap': prompt+='本轮先确认目标完成标准、里程碑、首阶段任务和验收，再完成双向 probe。尚未允许本地开始正式目标开发。\n'
     if a.kind=='replan': prompt+='本轮为基于证据的动态重规划：说明原方案为何不适用、替代方案和最小验证，允许在章程与架构授权边界内调整阶段拆分/顺序/实现方法；不改变用户结果目标与完成标准。超出边界给出升级建议，不擅自授权。\n'
@@ -248,9 +255,95 @@ def replace_manager(a):
     update(pm,data,'主管迁移经理 '+str(old)+' -> '+a.chat_url+'；需重新 bootstrap，保留全部历史。')
     output(data)
 
+
+def default_config():
+    return {'requested':{'mode':'Work','model':'GPT-6','reasoning':'default'},
+            'observed':None,'allowAutomaticUpgrade':False}
+
+def audit_evidence(a):
+    if not a.manager_idle: raise ValueError('Confirm manager idle; never interrupt active work')
+    evidence=Path(a.evidence).read_text(encoding='utf-8').strip()
+    if not evidence: raise ValueError('Nonempty inspection evidence required')
+    return evidence
+
+def cancel_unsent(a):
+    _,pm,data=state(a.project)
+    evidence=audit_evidence(a)
+    if not a.reason.strip(): raise ValueError('Cancellation reason required')
+    rid=a.round
+    if not re.fullmatch(r'[A-Za-z0-9_-]+',rid): raise ValueError('Invalid round ID')
+    folder=pm/'rounds'/rid
+    if folder.is_symlink() or not folder.is_dir(): raise ValueError('Missing or unsafe round')
+    if any(x.is_symlink() for x in folder.rglob('*')): raise ValueError('Unsafe symlink in round')
+    if data.get('activeRound') not in [None,rid]: raise ValueError('Another round is active')
+    if data.get('lastAcceptedRound')==rid: raise ValueError('Cannot cancel accepted round')
+    if (folder/'CANCELLED.json').exists(): raise ValueError('Round already cancelled; preserve audit')
+    # An empty outbox and absent receipt alone do NOT prove that a message was unsent.
+    if any((folder/'outbox').iterdir()): raise ValueError('PM output exists; use diagnosis/recover, not cancel_unsent')
+    for receipt in folder.rglob('*.json'):
+        obj=json.loads(receipt.read_text(encoding='utf-8'))
+        if isinstance(obj,dict) and (obj.get('status') in ['intent','submitted','uncertain'] or obj.get('state') in ['intent','submitted','uncertain']):
+            raise ValueError('Send receipt exists; resolve unknown/sent delivery using recover')
+    save(folder/'CANCELLED.json',{'roundId':rid,'reason':a.reason,'evidence':evidence,
+         'recordedAt':h.now(),'deliveryAssessment':'confirmed_unsent','approved':False})
+    if data.get('activeRound')==rid:
+        data.update(activeRound=None,status='changes_requested' if data.get('bootstrapApproved') else 'initializing')
+    update(pm,data,'取消经浏览器核实未发送轮次 '+rid+'：'+a.reason+'；保留原始记录。')
+    output(data)
+
+def migrate(a):
+    _,pm,data=state(a.project)
+    evidence=audit_evidence(a)
+    version=data.get('schemaVersion')
+    if version==4: output(data);return
+    if version not in [2,3]: raise ValueError('Only schema v2/v3 can migrate')
+    if data.get('activeRound'): raise ValueError('Resolve active round before migration; never overwrite it')
+    if not a.developer_idle: raise ValueError('Pause developer writes in an agreed maintenance window')
+    # Reject links before backup or writes. Archive all old controls, receipts and output.
+    if any(x.is_symlink() for x in pm.rglob('*')): raise ValueError('Symlink in legacy state; inspect before migration')
+    backup=pm/'migration-archives'/('v'+str(version)+'-'+uuid.uuid4().hex)
+    backup.mkdir(parents=True)
+    for source in list(pm.iterdir()):
+        if source.name=='migration-archives': continue
+        target=backup/source.name
+        if source.is_dir(): shutil.copytree(source,target)
+        else: shutil.copy2(source,target)
+    save(backup/'MIGRATION.json',{'from':version,'to':4,'recordedAt':h.now(),'evidence':evidence,'approved':False})
+    base=Path(__file__).resolve().parent.parent
+    for name in ['reports','evidence','supervisor','owner']: (pm/name).mkdir(exist_ok=True)
+    for name in ['CHARTER.md','ARCHITECTURE.md','MILESTONES.md','PROGRESS.md','ESCALATIONS.md','FINAL_REPORT.md']:
+        if not (pm/name).exists(): shutil.copy2(base/'templates'/name,pm/name)
+    shutil.copy2(base/'templates/DEVELOPER_CONTRACT.md',pm/'DEVELOPER_CONTRACT.md')
+    shutil.copy2(base/'templates/STAGE_REPORT.md',pm/'reports/STAGE_REPORT_TEMPLATE.md')
+    shutil.copy2(base/'references/pm.md',pm/'PM_INSTRUCTIONS.md')
+    config=json.loads((pm/'MANAGER_CONFIG.json').read_text(encoding='utf-8')) if (pm/'MANAGER_CONFIG.json').exists() else default_config()
+    config['observed']=None
+    save(pm/'MANAGER_CONFIG.json',config)
+    data.update(schemaVersion=4,status='initializing',bootstrapApproved=False,supervisorApproved=False,
+                ownerAccepted=False,activeRound=None,planRevision=data.get('planRevision',1),
+                migrationArchive=str(backup.relative_to(pm)))
+    update(pm,data,'迁移 v'+str(version)+' → v4；保留目标、绑定和历史，重新 bootstrap，不继承最终批准。')
+    output(data)
+
+def configure(a):
+    _,pm,data=state(a.project)
+    evidence=audit_evidence(a)
+    if data.get('activeRound') or data['status'] not in ['initializing','ready','changes_requested','blocked']:
+        raise ValueError('Configure only at idle boundary, outside pending/final review')
+    config={'requested':{'mode':a.mode,'model':a.model,'reasoning':a.reasoning},
+            'observed':{'mode':a.observed_mode,'model':a.observed_model,'reasoning':a.observed_reasoning,
+                        'evidence':evidence,'recordedAt':h.now()},'allowAutomaticUpgrade':False}
+    old=json.loads((pm/'MANAGER_CONFIG.json').read_text(encoding='utf-8'))
+    archive=pm/'reports'/('manager-config-'+uuid.uuid4().hex+'.json')
+    save(archive,{'previous':old,'replacement':config})
+    save(pm/'MANAGER_CONFIG.json',config)
+    data.update(bootstrapApproved=False,status='initializing')
+    update(pm,data,'记录用户选择及实际 UI 模型配置，重新 bootstrap；未自动切换网页模型。')
+    output(config)
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);s=p.add_subparsers(dest='action',required=True)
-    for name in ['init','bind','begin','prepare','accept','status','blocked','developer_prompt','supervisor_review','owner_confirm','recover','replace_manager']:
+    for name in ['init','bind','begin','prepare','accept','status','blocked','developer_prompt','supervisor_review','owner_confirm','recover','replace_manager','cancel_unsent','migrate','configure']:
         q=s.add_parser(name);q.add_argument('--project',required=True)
         if name=='init': q.add_argument('--project-id',required=True);q.add_argument('--goal-file',required=True);q.add_argument('--chat-url')
         if name=='bind': q.add_argument('--chat-url',required=True)
@@ -261,8 +354,13 @@ def main():
         if name=='supervisor_review':
             q.add_argument('--report',required=True);q.add_argument('--decision',choices=['approved','changes_requested'],required=True)
         if name=='owner_confirm':q.add_argument('--confirmation',required=True)
-        if name in ['recover','replace_manager']:
+        if name in ['recover','replace_manager','cancel_unsent','migrate','configure']:
             q.add_argument('--evidence',required=True);q.add_argument('--manager-idle',action='store_true',required=True)
+        if name=='cancel_unsent':
+            q.add_argument('--round',required=True);q.add_argument('--reason',required=True)
+        if name=='migrate':q.add_argument('--developer-idle',action='store_true',required=True)
+        if name=='configure':
+            for field in ['mode','model','reasoning','observed-mode','observed-model','observed-reasoning']: q.add_argument('--'+field,required=True)
         if name=='replace_manager':q.add_argument('--chat-url',required=True)
     a=p.parse_args()
     try:

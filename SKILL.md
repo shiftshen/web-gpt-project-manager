@@ -3,7 +3,7 @@ name: web-gpt-project-manager
 description: 为任意项目建立四角色开发协作：Codex 主管规划架构并初始化维护文件与固定网页 GPT 经理，经理制定步骤和阶段验收，其他 AI 开发者实施测试，最终由主管和项目主人验收。用于项目启动、目标模式持续推进、阶段纠偏、跨模型交接。
 ---
 
-# 通用项目主管与网页开发经理 v3
+# 通用项目主管与网页开发经理 v4
 
 用户给项目目标后，Codex 主管负责建立完整协作环境并交付网页链接和可直接转发的开发者提示词。技能独立于所有业务仓库；各项目状态只存在其 `.gpt-pm/`。
 
@@ -52,3 +52,7 @@ approved 才推进；changes_requested 同阶段修正；blocked 暂停依赖任
 目标模式的提示词既承担首次交接，也定义持续目标循环。初始里程碑只是路线假设，允许在真实证据支持下合并、拆分、调整顺序、替换失败方案。按 `prepare --kind replan` 交一次证据与替代方案，经理在既有授权内批准新任务；改变总体目标、权限、预算或重大架构则升级主管。不要机械照搬初始阶段编号，也不要无限重构。
 
 恢复说明见 [recovery.md](references/recovery.md)，首次安装 WebCodex 和本技能见 [setup.md](references/setup.md)。先检测能力再启动；本地开发者可无 WebCodex，网页经理必须有真实可用的项目访问渠道。工具原作者致谢见仓库 CREDITS.md。
+
+## v4 收尾规则
+
+启动、阶段改动权限和升级通知遵循 [authority.md](references/authority.md)。Work、模型及推理档位保存在 MANAGER_CONFIG.json，用户本次选择优先，实际 UI 必须核实；无凭据不能假称可用。旧项目使用 [recovery.md](references/recovery.md) 的 cancel_unsent/migrate 命令，不手改状态。统一报告包含逐项验收与当前源码、命令退出码、证据的映射；最终验收不得省略未验证项。

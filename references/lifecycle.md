@@ -24,6 +24,8 @@ python3 "$SKILL/scripts/project.py" init --project "$PROJECT" --project-id "$PRO
 
 项目内文件被 WebCodex 访问，网页不需要访问 ~/.codex。全局技能不保存任何项目配置。其他模型可直接读取 SKILL.md 使用，无需安装到 ChatGPT 插件。
 
+MANAGER_CONFIG.json 保存 requested/observed 配置，纳入审核指纹。首次准备审核前，按 [authority.md](authority.md) 的 configure 命令记录实际 UI；默认配置尚未核实，prepare 会拒绝。
+
 ## 启动会话与握手
 
 本地浏览器 `chrome_chat.py new` 创建项目专用标签；读取页面确认 Chat/Work 与模型，不改变用户偏好。已有 URL 使用 list 查找对应标签，不开重复会话。还没有标签时在新标签打开准确已绑定 URL。
@@ -109,4 +111,4 @@ python3 "$SKILL/scripts/project.py" owner_confirm --project "$PROJECT" --confirm
 
 记录真实回复及来源/时间，不用模板伪造。脚本验证主管报告未变、源码与共同文件未变，然后标 complete。角色权限属于协作规范，不是操作系统隔离。
 
-原 v2 项目有活动轮次时先恢复或处理它，不强改共同控制文件；无活动轮次后由主管备份旧状态、补齐 v3 文件并重新验证启动。不能继承旧 complete 当作主人已确认。
+旧 v2/v3 使用 recovery.md 中的 cancel_unsent/migrate 命令，禁止手改状态；迁移后重新 bootstrap。
