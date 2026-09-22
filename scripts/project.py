@@ -97,9 +97,14 @@ def prepare(a):
     if data['activeRound']: raise ValueError('Pending round exists; resume it instead of duplicate submission')
     config=json.loads((pm/'MANAGER_CONFIG.json').read_text(encoding='utf-8'))
     observed=config.get('observed') or {}
-    if any(not observed.get(k) or observed.get(k) in ['unknown','unverified'] or observed.get(k)!=v for k,v in config['requested'].items()) or not observed.get('evidence'):
-        raise ValueError('Manager configuration not verified/matched; inspect actual UI and configure first')
-    if a.kind=='bootstrap':
+    policy=config.get('verificationPolicy','strict')
+    unresolved=any(not observed.get(k) or observed.get(k) in ['unknown','unverified'] or observed.get(k)!=v for k,v in config['requested'].items()) or not observed.get('evidence')
+    if a.kind!='consult' and unresolved and not (policy=='keep_existing' and config.get('policyAuthorization') and observed.get('evidence')):
+        raise ValueError('Manager configuration not verified/matched; inspect UI, consult PM, or record user-authorized keep_existing policy')
+    if a.kind=='consult':
+        if not data.get('chatUrl') or data['status'] in ['complete','supervisor_review_pending','owner_acceptance_pending']:
+            raise ValueError('Consult requires bound PM and an unfinished development phase')
+    elif a.kind=='bootstrap':
         if data['bootstrapApproved'] or data['status'] not in ['initializing','blocked','changes_requested']:
             raise ValueError('Bootstrap already approved or wrong state')
     elif not data['bootstrapApproved'] or data['status'] not in ['running','ready','changes_requested','blocked']:
@@ -109,12 +114,13 @@ def prepare(a):
         h.prepare(argparse.Namespace(project=str(root),project_id=data['projectId'],summary=a.summary,files=a.files,probe=a.kind=='bootstrap'))
     info=json.loads(capture.getvalue());folder=Path(info['round'])
     req=json.loads((folder/'REQUEST.json').read_text(encoding="utf-8"))
-    req.update(kind=a.kind,stage=data['stage'],projectRoot=str(root),projectId=data['projectId'],controlHashes=controls(pm))
+    req.update(kind=a.kind,stage=data['stage'],projectRoot=str(root),projectId=data['projectId'],controlHashes=controls(pm),priorStatus=data['status'])
     save(folder/'REQUEST.json',req)
     prompt=(folder/'PROMPT.txt').read_text(encoding="utf-8")
     prompt+='\n这是固定项目经理会话的 '+a.kind+' 轮，阶段 '+str(data['stage'])+'。\n'
-    prompt+='先读取 '+str(pm/'PM_INSTRUCTIONS.md')+' 和 MANAGER_CONFIG.json（requested 是用户选择，observed 是实际 UI 证据；不一致或未核实必须阻塞，不擅自升级）、GOAL.md、CHARTER.md、ARCHITECTURE.md、MILESTONES.md、PLAN.md、ACCEPTANCE.md、STATUS.md、DECISIONS.md。按 REQUEST.controlHashes 核验共同控制文件。\n'
+    prompt+='先读取 '+str(pm/'PM_INSTRUCTIONS.md')+' 和 MANAGER_CONFIG.json（requested 是用户选择，observed 是实际 UI 证据；strict 要求一致；有用户授权的 keep_existing 保持当前会话，unknown 不冒充核实；consult 仅诊断，不擅自升级）、GOAL.md、CHARTER.md、ARCHITECTURE.md、MILESTONES.md、PLAN.md、ACCEPTANCE.md、STATUS.md、DECISIONS.md。按 REQUEST.controlHashes 核验共同控制文件。\n'
     prompt+='当前绑定会话：'+str(data['chatUrl'] or '首次启动，发送后本地绑定真实会话URL')+'；后续阶段沿用本会话。\n'
+    if a.kind=='consult': prompt+='本轮仅问题咨询：诊断 HANDOFF 的阻塞，给出原权限内恢复方案；approved 只表示建议完整，不批准实施，不通过 bootstrap，不授予权限。无法解决才列出需要主管/主人的最小决定。不要自报模型身份当作 UI 证据。\n'
     if a.kind=='bootstrap': prompt+='本轮先确认目标完成标准、里程碑、首阶段任务和验收，再完成双向 probe。尚未允许本地开始正式目标开发。\n'
     if a.kind=='replan': prompt+='本轮为基于证据的动态重规划：说明原方案为何不适用、替代方案和最小验证，允许在章程与架构授权边界内调整阶段拆分/顺序/实现方法；不改变用户结果目标与完成标准。超出边界给出升级建议，不擅自授权。\n'
     if a.kind=='final': prompt+='经理只能判定已具备提交最终验收的条件；不得宣布项目最终完成。这是总体目标终验：逐条核对 GOAL，不把阶段完成当总体完成。DONE.json 增加 goalComplete 布尔值；全部必需目标完成才 approved 且 true。\n'
@@ -140,6 +146,10 @@ def accept(a):
     result=json.loads(capture.getvalue())
     done=json.loads((folder/'outbox/DONE.json').read_text(encoding="utf-8"))
     status=result['status']
+    if req['kind']=='consult':
+        data.update(activeRound=None,lastConsultRound=rid,status=req.get('priorStatus','blocked') if status=='approved' else 'blocked')
+        update(pm,data,'收到诊断建议 '+rid+'；不改变计划、不批准开发、不重置连续返工记录。')
+        output({'state':data,'review':result,'consultOnly':True});return
     if req['kind']=='final' and status=='approved' and done.get('goalComplete') is not True:
         raise ValueError('Final approval requires explicit goalComplete=true and human-readable evidence')
     if status=='approved':
@@ -173,16 +183,29 @@ def blocked(a):
     update(pm,data,'阻塞（未通过审核，保留当前轮次）：'+a.reason)
     output(data)
 
+def render_prompt(root,pm,data,template_name,target_name):
+    template=(Path(__file__).resolve().parent.parent/'templates'/template_name).read_text(encoding='utf-8')
+    text=template.replace('{{PROJECT_ROOT}}',str(root)).replace('{{PROJECT_ID}}',data['projectId']).replace('{{CHAT_URL}}',data['chatUrl'])
+    (pm/target_name).write_text(text,encoding='utf-8')
+    return str(pm/target_name)
+
+def handoff_prompt(a):
+    root,pm,data=state(a.project)
+    if not data.get('chatUrl'): raise ValueError('Bind actual manager URL before handoff')
+    path=render_prompt(root,pm,data,'DEVELOPER_HANDOFF_PROMPT.md','DEVELOPER_HANDOFF_PROMPT.md')
+    output({'managerUrl':data['chatUrl'],'handoffPrompt':path,'goalReleased':False,'status':data['status']})
+
 def developer_prompt(a):
     root,pm,data=state(a.project)
-    if not data.get('bootstrapApproved') or not data.get('chatUrl'):
-        raise ValueError('Cannot issue developer launch prompt before verified bootstrap')
+    if not data.get('bootstrapApproved') or not data.get('chatUrl') or data.get('activeRound'):
+        raise ValueError('Cannot issue developer launch prompt before verified bootstrap / while review pending')
     if data['status'] not in ['ready','running','changes_requested']:
         raise ValueError('Project is not released for development')
-    template=(Path(__file__).resolve().parent.parent/'templates/DEVELOPER_PROMPT.md').read_text(encoding="utf-8")
-    text=template.replace('{{PROJECT_ROOT}}',str(root)).replace('{{PROJECT_ID}}',data['projectId']).replace('{{CHAT_URL}}',data['chatUrl'])
-    (pm/'DEVELOPER_PROMPT.md').write_text(text, encoding="utf-8")
-    output({'projectRoot':str(root),'managerUrl':data['chatUrl'],'developerPrompt':str(pm/'DEVELOPER_PROMPT.md'),'status':data['status']})
+    handoff=render_prompt(root,pm,data,'DEVELOPER_HANDOFF_PROMPT.md','DEVELOPER_HANDOFF_PROMPT.md')
+    contract=render_prompt(root,pm,data,'DEVELOPER_PROMPT.md','DEVELOPER_PROMPT.md')
+    goal=render_prompt(root,pm,data,'DEVELOPER_GOAL_PROMPT.md','DEVELOPER_GOAL_PROMPT.md')
+    output({'projectRoot':str(root),'managerUrl':data['chatUrl'],'handoffPrompt':handoff,
+            'goalPrompt':goal,'developerPrompt':contract,'goalReleased':True,'status':data['status']})
 
 def final_fresh(pm,data):
     if controls(pm)!=data['finalControlHashes']: raise ValueError('Final goal/architecture/plan changed after PM approval')
@@ -333,6 +356,15 @@ def configure(a):
     config={'requested':{'mode':a.mode,'model':a.model,'reasoning':a.reasoning},
             'observed':{'mode':a.observed_mode,'model':a.observed_model,'reasoning':a.observed_reasoning,
                         'evidence':evidence,'recordedAt':h.now()},'allowAutomaticUpgrade':False}
+    policy=getattr(a,'policy','strict')
+    if policy not in ['strict','keep_existing']: raise ValueError('Invalid verification policy')
+    authorization=getattr(a,'authorization',None)
+    if policy=='keep_existing':
+        if not authorization: raise ValueError('keep_existing requires actual user authorization record')
+        record=Path(authorization).read_text(encoding='utf-8').strip()
+        if not record: raise ValueError('Nonempty authorization record required')
+        config['policyAuthorization']=record
+    config['verificationPolicy']=policy
     old=json.loads((pm/'MANAGER_CONFIG.json').read_text(encoding='utf-8'))
     archive=pm/'reports'/('manager-config-'+uuid.uuid4().hex+'.json')
     save(archive,{'previous':old,'replacement':config})
@@ -343,12 +375,12 @@ def configure(a):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);s=p.add_subparsers(dest='action',required=True)
-    for name in ['init','bind','begin','prepare','accept','status','blocked','developer_prompt','supervisor_review','owner_confirm','recover','replace_manager','cancel_unsent','migrate','configure']:
+    for name in ['init','bind','begin','prepare','accept','status','blocked','handoff_prompt','developer_prompt','supervisor_review','owner_confirm','recover','replace_manager','cancel_unsent','migrate','configure']:
         q=s.add_parser(name);q.add_argument('--project',required=True)
         if name=='init': q.add_argument('--project-id',required=True);q.add_argument('--goal-file',required=True);q.add_argument('--chat-url')
         if name=='bind': q.add_argument('--chat-url',required=True)
         if name=='prepare':
-            q.add_argument('--kind',choices=['bootstrap','stage','replan','final'],required=True)
+            q.add_argument('--kind',choices=['bootstrap','stage','replan','final','consult'],required=True)
             q.add_argument('--summary',required=True);q.add_argument('--files',nargs='+',required=True)
         if name=='blocked':q.add_argument('--reason',required=True)
         if name=='supervisor_review':
@@ -360,6 +392,7 @@ def main():
             q.add_argument('--round',required=True);q.add_argument('--reason',required=True)
         if name=='migrate':q.add_argument('--developer-idle',action='store_true',required=True)
         if name=='configure':
+            q.add_argument('--policy',choices=['strict','keep_existing'],default='strict');q.add_argument('--authorization')
             for field in ['mode','model','reasoning','observed-mode','observed-model','observed-reasoning']: q.add_argument('--'+field,required=True)
         if name=='replace_manager':q.add_argument('--chat-url',required=True)
     a=p.parse_args()

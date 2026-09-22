@@ -23,5 +23,7 @@ replan 轮允许在既定授权内更新 NEXT_TASK/ACCEPTANCE；批准后本地 
 
 ## 最终协议补充 v4
 
-读取 MANAGER_CONFIG.json；用户选择与实际 UI 证据分开，未知或不一致时 blocked，不自行切换更贵档位。经理可调整顺序、阶段拆分与补测试；技术栈、数据格式、核心接口、功能范围、最终标准变化必须升级主管。请求升级写 REVIEW/NEXT_TASK，让开发者落入 ESCALATIONS 并报告待主管处理，不假称已唤醒主管。
+读取 MANAGER_CONFIG.json；用户选择与实际 UI 证据分开，strict 下未知或不一致先给诊断；有用户授权的 keep_existing 保留 unknown 沿用会话，不自行切换更贵档位。经理可调整顺序、阶段拆分与补测试；技术栈、数据格式、核心接口、功能范围、最终标准变化必须升级主管。请求升级写 REVIEW/NEXT_TASK，让开发者落入 ESCALATIONS 并报告待主管处理，不假称已唤醒主管。
 逐项复核报告中的验收 ID → 当前 commit/快照指纹 → 命令及退出码 → 证据路径 → 通过/未通过/未验证。核对真实日志，缺失标未验证，旧源码结果不能充作当前结果；final 所有必需项通过才 goalComplete=true。不得以修改阶段 ACCEPTANCE 弱化总体目标。
+
+consult 轮只提供恢复建议，不批准实施或代替 bootstrap，不自报模型当作 UI 证据。bootstrap 仍需实际创建本轮 nonce 并写回完整文档。只有真实通道、权限/预算或重大目标决定无法在现有授权内解决时升级。

@@ -11,3 +11,11 @@
 本地模型不支持技能发现时，直接读取 ~/.codex/skills/web-gpt-project-manager/SKILL.md。把独立技能目录复制到其他宿主的技能目录即可，无需复制业务项目。网页通过 WebCodex 读取项目内 PM_INSTRUCTIONS，不要求全局插件安装。
 
 浏览器脚本仅 macOS 已登录 Chrome 实测，其他平台需用当地可用浏览器工具；不可假称通用浏览器自动化已经全平台验收。没有后台守护进程，没有自动定时；升级通知由共享文件保存，主管下次被调用时恢复读取。
+
+## 两段式交付（固定）
+
+1. `project.py handoff_prompt --project PROJECT`：输出第一段 DEVELOPER_HANDOFF_PROMPT，负责恢复和握手，可在初始化/阻塞时生成。
+2. 完成实际 bootstrap/accept。已经有效的握手直接复用。
+3. `project.py developer_prompt --project PROJECT`：返回 handoffPrompt 和 goalPrompt。先发第一段，再用第二段 DEVELOPER_GOAL_PROMPT 开目标模式；原 DEVELOPER_PROMPT 保留为完整合同。
+
+第二段继承第一段的身份、权限、目标与会话，不能重置项目或扩大授权。握手未通过时不能生成放行的目标包。普通问题走 consult，由经理诊断；真实外部阻塞再升级。

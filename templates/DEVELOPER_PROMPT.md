@@ -52,10 +52,13 @@ awaiting_review 时等待原会话，不重发；stale 时冻结代码并建立�
 经理可重排/拆分阶段、补测试、批准架构内局部实现。更换技术栈、数据格式、核心接口、扩大范围或改变最终标准，先记录 ESCALATIONS.md，等待主管明确决定。没有实际唤醒能力时，在当前界面报告“待主管处理”，保留轮次、URL、证据和恢复入口；写共享文件不等于主管收到通知。只暂停依赖事项，不伪造通知或批准。
 
 [MANAGER_CONFIGURATION]
-先读 MANAGER_CONFIG.json。requested 是用户本次要求，observed 是网页实际检查记录。未核实/不一致时阻塞启动，不能擅自使用更贵模型或推理档位。变更走 configure 和重新 bootstrap。
+先读 MANAGER_CONFIG.json。requested 是用户本次要求，observed 是网页实际检查记录。按 verificationPolicy 执行：strict 未核实/不一致时先咨询经理；用户授权的 keep_existing 可保留 unknown 沿用当前会话。两种策略均不能擅自切换或使用更贵模型/档位。变更走 configure 和重新 bootstrap。
 
 [EVIDENCE_MAP]
 每个验收 ID 必须列明：当前 commit/源码指纹、验证命令与退出码、证据路径与摘要、通过/未通过/未验证。未执行标未验证、退出码写 N/A；不能将旧 commit 的结果移用到新代码。Git 脏树或未跟踪代码用实际文件快照哈希；报告通过 --summary 固化为带哈希的 HANDOFF；验证日志放在项目内可选取的 review-evidence/，以 --files 纳入源码快照。.gpt-pm 不允许放进 --files；若原日志在那里，先复制脱敏日志到 review-evidence/，在报告标明来源和哈希。最终逐项覆盖 GOAL/CHARTER 中的必需验收项，不得只列通过项。
 
 [LEGACY_AND_DELIVERY]
 旧 v2/v3 先核对实际轮次，使用 cancel_unsent/migrate 审计命令，不手改状态。未发送才可取消；intent/uncertain 或网页不可访问时不重发、不推断已停工。部分 outbox 保留并等待原轮；源码变化拒绝旧批准，经理停止后 recover 再新快照。详细命令及五类恢复规则见 references/recovery.md。
+
+[DELIVERY_ORDER]
+本文件是完整执行合同。主管另交付 DEVELOPER_HANDOFF_PROMPT.md（先恢复与握手）和 DEVELOPER_GOAL_PROMPT.md（握手通过后开启持续目标），按此顺序使用，不重复初始化。普通问题先 prepare consult 请固定经理诊断，consult 不替代 bootstrap 或批准代码。

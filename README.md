@@ -41,8 +41,8 @@ python3 scripts/doctor.py
 Windows 使用 `python`。默认安装到 `~/.codex/skills/web-gpt-project-manager`；其他智能体可用 `--dest` 指定其技能目录。更新时 `--replace` 会保留旧版本备份，不静默覆盖。
 
 3. 网页经理要读取本机，先按 [WebCodex 配置指南](references/setup.md) 建立连接。本地开发者自身可以没有 WebCodex。
-4. 把 [Codex 主管提示词](templates/CODEX_SUPERVISOR_PROMPT.md) 发给主管模型，附上你的项目目标。它应建立维护文件、固定经理会话并验证双向通信，然后返回真实网页链接和已填好参数的开发者提示词。
-5. 把生成的提示词交给你选择的开发模型，以目标模式推进。经理通过最终审核后仍需主管与主人最终验收。
+4. 把 [Codex 主管提示词](templates/CODEX_SUPERVISOR_PROMPT.md) 发给主管模型，附上你的项目目标。它应建立维护文件、固定经理会话并验证双向通信，然后返回真实网页链接及两段提示词：交接恢复提示词、握手后的目标提示词。
+5. 先把交接提示词交给开发模型；确认握手通过后，再把目标提示词用于开启目标模式。经理通过最终审核后仍需主管与主人最终验收。
 
 已有技能的简短启动语：
 
@@ -55,7 +55,8 @@ Windows 使用 `python`。默认安装到 `~/.codex/skills/web-gpt-project-manag
 - [完整命令与生命周期](references/lifecycle.md)
 - [动态规划与恢复](references/recovery.md)
 - [角色和报告责任](references/reporting.md)
-- [开发者目标模式模板](templates/DEVELOPER_PROMPT.md)
+- [第一段：交接提示词](templates/DEVELOPER_HANDOFF_PROMPT.md)
+- [第二段：握手后目标提示词](templates/DEVELOPER_GOAL_PROMPT.md)
 - [WebCodex 官方链接与首次配置](references/setup.md)
 
 新消息不是新项目：上下文压缩或更换开发者后从持久状态恢复。网页仍运行时不打断、不重复发。经理会话确实无法恢复时由主管迁移并重新握手。安全/审批拒绝不作为普通网络故障绕过。
@@ -81,3 +82,7 @@ MIT License。发布包不含个人会话、业务代码、账号配置或 WebCo
 ## v0.2.0 协议收尾
 
 新增可审计 cancel_unsent / migrate 与独立 requested/observed 模型配置；明确架构权限、升级通知、五类恢复路径和逐项验收证据索引。旧项目先读 [迁移说明](references/recovery.md)，配置与权限见 [说明](references/authority.md)。迁移保留全部历史并重新握手，不能继承旧完成状态。
+
+## v0.3.0 两段式交付与问题诊断
+
+固定交付“经理链接 → 交接提示词 → 实际握手 → 目标提示词”。新增 consult 诊断，不以咨询批准业务开发；增加有用户授权的 keep_existing 配置策略，模型标签不可读仍可诚实沿用当前会话，不擅自切换。严格模式保留。查看菜单无需重复授权，普通问题先经理纠偏，权限/预算与重大决策再升级。
