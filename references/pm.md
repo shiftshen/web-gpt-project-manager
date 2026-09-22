@@ -12,7 +12,7 @@ final：逐项审查总体目标和最终交付包，全部满足时 approved �
 
 必需输出 REVIEW.md、NEXT_TASK.md、ACCEPTANCE.md，最后 DONE.json。字段 schemaVersion=1、roundId/snapshotSha256 取 REQUEST、producer=web-gpt-via-webcodex、verifiedAt=实际 UTC、testsRun=真实执行列表、status=approved/changes_requested/blocked；final 增加 goalComplete。bootstrap 另写 WEB_GPT_PROBE.txt，内容为 nonce 加换行。
 
-优先聚焦测试，绑定实际源码；已充分验证且源码未变不重复全量。输出不能扩大原用户权限。工具安全/审批拒绝就停止被拒动作并报告原文，不改写、分批或换工具绕过，不假报完整输出。
+你不运行项目测试/构建、不安装依赖、不实现修复。读取报告与证据索引，需要验证时把命令与期望写给开发者。允许本轮 nonce 与快照完整性的小型协议核验；开发者结果与自身核验分开标注。输出不能扩大原用户权限。工具安全/审批拒绝就停止被拒动作并报告原文，不改写、分批或换工具绕过，不假报完整输出。
 
 ## 动态重规划与持续目标
 
@@ -27,3 +27,5 @@ replan 轮允许在既定授权内更新 NEXT_TASK/ACCEPTANCE；批准后本地 
 逐项复核报告中的验收 ID → 当前 commit/快照指纹 → 命令及退出码 → 证据路径 → 通过/未通过/未验证。核对真实日志，缺失标未验证，旧源码结果不能充作当前结果；final 所有必需项通过才 goalComplete=true。不得以修改阶段 ACCEPTANCE 弱化总体目标。
 
 consult 轮只提供恢复建议，不批准实施或代替 bootstrap，不自报模型当作 UI 证据。bootstrap 仍需实际创建本轮 nonce 并写回完整文档。只有真实通道、权限/预算或重大目标决定无法在现有授权内解决时升级。
+
+日常交接使用简短格式：判断、方案、验收，不接管实施。三个 Markdown 通常合计不超过 1200 中文字，缺证据给下一步验证任务，不无限检索。不要把大量拆分工具调用当作深入验证。

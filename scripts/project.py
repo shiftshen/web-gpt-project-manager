@@ -118,7 +118,7 @@ def prepare(a):
     save(folder/'REQUEST.json',req)
     prompt=(folder/'PROMPT.txt').read_text(encoding="utf-8")
     prompt+='\n这是固定项目经理会话的 '+a.kind+' 轮，阶段 '+str(data['stage'])+'。\n'
-    prompt+='先读取 '+str(pm/'PM_INSTRUCTIONS.md')+' 和 MANAGER_CONFIG.json（requested 是用户选择，observed 是实际 UI 证据；strict 要求一致；有用户授权的 keep_existing 保持当前会话，unknown 不冒充核实；consult 仅诊断，不擅自升级）、GOAL.md、CHARTER.md、ARCHITECTURE.md、MILESTONES.md、PLAN.md、ACCEPTANCE.md、STATUS.md、DECISIONS.md。按 REQUEST.controlHashes 核验共同控制文件。\n'
+    prompt+='先读取 '+str(pm/'PM_INSTRUCTIONS.md')+' 和 MANAGER_CONFIG.json（requested 是用户选择，observed 是实际 UI 证据；strict 要求一致；有用户授权的 keep_existing 保持当前会话，unknown 不冒充核实；consult 仅诊断，不擅自升级）、GOAL.md、CHARTER.md、ARCHITECTURE.md、MILESTONES.md、PLAN.md、ACCEPTANCE.md、STATUS.md、DECISIONS.md。按 REQUEST.controlHashes 做小型完整性核验；先读 HANDOFF，bootstrap 时确认基线，后续只读变化或与本次问题相关的控制文件内容，不重复全量阅读。\n'
     prompt+='当前绑定会话：'+str(data['chatUrl'] or '首次启动，发送后本地绑定真实会话URL')+'；后续阶段沿用本会话。\n'
     if a.kind=='consult': prompt+='本轮仅问题咨询：诊断 HANDOFF 的阻塞，给出原权限内恢复方案；approved 只表示建议完整，不批准实施，不通过 bootstrap，不授予权限。无法解决才列出需要主管/主人的最小决定。不要自报模型身份当作 UI 证据。\n'
     if a.kind=='bootstrap': prompt+='本轮先确认目标完成标准、里程碑、首阶段任务和验收，再完成双向 probe。尚未允许本地开始正式目标开发。\n'

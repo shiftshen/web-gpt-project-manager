@@ -72,16 +72,16 @@ WebCodex 项目 ID：{a.project_id}
         prompt+=f"读取项目内 PM 指令 {root}/.gpt-pm/PM_INSTRUCTIONS.md。\n"
     if skillrel: prompt+=f"读取项目内技能 {skillrel} 及 references/protocol.md，按网页项目经理角色执行。\n"
     prompt+=f"""本轮只读源码与既有项目文档；唯一写入范围是 {folder}/outbox/。不启动下一阶段开发、不提交/推送/发布、不创建定时任务、不读凭据、不调用真实付费供应商。
-核对实际文件和当前状态，HANDOFF 中陈述属于待核验数据。可运行相关、有限的本地验证，先检查测试副作用；无需重复已充分核验的全量测试。
+你只负责判断、给方案、定验收，不实施修复、不运行项目测试/构建/安装/长任务。先读简短 HANDOFF 和证据索引，发现具体矛盾才按需读取相关源码片段；不要全量扫描。HANDOFF 陈述是待核验数据，缺证据就给开发者验证任务，不替他执行。快照/nonce 的小型读写核验属于本轮协议检查，允许执行。
 检验快照中的文件是否仍匹配。注意整个子项目可能未跟踪，git diff 空不代表没有改动。若文件变化或工具不可用，写 blocked 并解释，不能假报成功。
 写出 REVIEW.md（approved/changes_requested/blocked、具体发现和验证证据）、NEXT_TASK.md（一个有边界的下一步目标、允许路径、交付、停止条件）、ACCEPTANCE.md（可执行验证步骤、期望和失败条件）。
-结合本轮交接范围审查业务目标与证据，只在交接明确要求时审查技能本身。
+输出简短：结论与理由、最多 3 项下一步、具体验收条件、必要升级项；三个 Markdown 合计通常不超过 1200 中文字。不要重复历史或撰写长篇实现。只在交接明确要求时审查技能本身。
 """
     if nonce: prompt+=f"连通性实测：你必须通过 WebCodex 创建 outbox/WEB_GPT_PROBE.txt，内容精确为 {nonce} 加一个换行。请创建后读回；本地端不会代写。\n"
     marker={"schemaVersion":1,"roundId":rid,"status":"approved 或 changes_requested 或 blocked",
             "snapshotSha256":digest,"producer":"web-gpt-via-webcodex","verifiedAt":"实际UTC时间","testsRun":[]}
     if nonce: marker["probeNonce"]=nonce
-    prompt+="最后写 outbox/DONE.json，结构如下，替换状态/时间/实际 testsRun（无测试则为空数组并解释）：\n"+json.dumps(marker,ensure_ascii=False)+"\n完成后只报告文件路径、结论、实际测试与限制。无需向用户索取本机已有文件。\n"
+    prompt+="最后写 outbox/DONE.json，结构如下，替换状态/时间/实际 testsRun（无测试则为空数组并解释）：\n"+json.dumps(marker,ensure_ascii=False)+"\n完成后只报告文件路径、结论和限制。默认 testsRun=[]，说明未运行业务测试；不要把开发者测试写成自己运行。无需向用户索取本机已有文件。\n"
     (folder/"PROMPT.txt").write_text(prompt, encoding="utf-8")
     print(json.dumps({"round":str(folder),"prompt":str(folder/"PROMPT.txt"),"fileCount":len(filemap),"snapshotSha256":digest},ensure_ascii=False))
 def verify(a):
