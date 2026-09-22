@@ -55,7 +55,7 @@ awaiting_review 时等待原会话，不重发；stale 时冻结代码并建立�
 先读 MANAGER_CONFIG.json。requested 是用户本次要求，observed 是网页实际检查记录。未核实/不一致时阻塞启动，不能擅自使用更贵模型或推理档位。变更走 configure 和重新 bootstrap。
 
 [EVIDENCE_MAP]
-每个验收 ID 必须列明：当前 commit/源码指纹、验证命令与退出码、证据路径与摘要、通过/未通过/未验证。未执行标未验证、退出码写 N/A；不能将旧 commit 的结果移用到新代码。Git 脏树或未跟踪代码用实际文件快照哈希；报告与证据须在审核快照选取范围内。最终逐项覆盖 GOAL/CHARTER 中的必需验收项，不得只列通过项。
+每个验收 ID 必须列明：当前 commit/源码指纹、验证命令与退出码、证据路径与摘要、通过/未通过/未验证。未执行标未验证、退出码写 N/A；不能将旧 commit 的结果移用到新代码。Git 脏树或未跟踪代码用实际文件快照哈希；报告通过 --summary 固化为带哈希的 HANDOFF；验证日志放在项目内可选取的 review-evidence/，以 --files 纳入源码快照。.gpt-pm 不允许放进 --files；若原日志在那里，先复制脱敏日志到 review-evidence/，在报告标明来源和哈希。最终逐项覆盖 GOAL/CHARTER 中的必需验收项，不得只列通过项。
 
 [LEGACY_AND_DELIVERY]
 旧 v2/v3 先核对实际轮次，使用 cancel_unsent/migrate 审计命令，不手改状态。未发送才可取消；intent/uncertain 或网页不可访问时不重发、不推断已停工。部分 outbox 保留并等待原轮；源码变化拒绝旧批准，经理停止后 recover 再新快照。详细命令及五类恢复规则见 references/recovery.md。
