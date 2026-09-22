@@ -112,7 +112,10 @@ def prepare(a):
     transport=getattr(a,'transport',None) or ('files' if a.kind=='bootstrap' else 'chat')
     if a.kind=='bootstrap' and transport!='files': raise ValueError('Bootstrap requires real file probe; chat cannot replace it')
     if transport=='chat' and not data.get('chatUrl'): raise ValueError('Chat review needs bound manager URL')
-    if transport=='chat' and len(Path(a.summary).read_text(encoding='utf-8'))>6000: raise ValueError('Chat summary too long; summarize progress and one decision')
+    brief_path=getattr(a,'brief',None)
+    brief=Path(brief_path).read_text(encoding='utf-8').strip() if brief_path else None
+    if brief_path and not brief: raise ValueError('Brief must not be empty')
+    if transport=='chat' and len(brief if brief is not None else Path(a.summary).read_text(encoding='utf-8'))>6000: raise ValueError('Chat summary too long; use --brief with the short manager summary')
     capture=io.StringIO()
     with contextlib.redirect_stdout(capture):
         h.prepare(argparse.Namespace(project=str(root),project_id=data['projectId'],summary=a.summary,files=a.files,probe=a.kind=='bootstrap'))
@@ -129,7 +132,8 @@ def prepare(a):
     if a.kind=='replan': prompt+='本轮为基于证据的动态重规划：说明原方案为何不适用、替代方案和最小验证，允许在章程与架构授权边界内调整阶段拆分/顺序/实现方法；不改变用户结果目标与完成标准。超出边界给出升级建议，不擅自授权。\n'
     if a.kind=='final': prompt+='经理只能判定已具备提交最终验收的条件；不得宣布项目最终完成。这是总体目标终验：逐条核对 GOAL，不把阶段完成当总体完成。DONE.json 增加 goalComplete 布尔值；全部必需目标完成才 approved 且 true。\n'
     if transport=='chat':
-        summary=(folder/'HANDOFF.md').read_text(encoding='utf-8')
+        summary=brief if brief is not None else (folder/'HANDOFF.md').read_text(encoding='utf-8')
+        if brief is not None:summary+='\n完整证据报告（仅需要时读取）：'+str(folder/'HANDOFF.md')
         example={'roundId':folder.name,'status':'approved|changes_requested|blocked',
                  'reason':'简短理由','nextTask':'最多三项，含范围','acceptance':'验收命令/条件，由开发者执行'}
         if a.kind=='final':example['goalComplete']=False
@@ -407,7 +411,7 @@ def main():
         if name=='bind': q.add_argument('--chat-url',required=True)
         if name=='prepare':
             q.add_argument('--kind',choices=['bootstrap','stage','replan','final','consult'],required=True)
-            q.add_argument('--summary',required=True);q.add_argument('--files',nargs='+',required=True);q.add_argument('--transport',choices=['files','chat'])
+            q.add_argument('--summary',required=True);q.add_argument('--files',nargs='+',required=True);q.add_argument('--transport',choices=['files','chat']);q.add_argument('--brief')
         if name=='blocked':q.add_argument('--reason',required=True)
         if name=='supervisor_review':
             q.add_argument('--report',required=True);q.add_argument('--decision',choices=['approved','changes_requested'],required=True)

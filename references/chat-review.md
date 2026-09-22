@@ -10,7 +10,7 @@
 ## 命令
 
 ```sh
-python3 "$SKILL/scripts/project.py" prepare --project "$PROJECT" --kind stage --summary "$REPORT" --files src tests review-evidence
+python3 "$SKILL/scripts/project.py" prepare --project "$PROJECT" --kind stage --summary "$REPORT" --brief "$BRIEF" --files src tests review-evidence
 # --transport 默认 chat（bootstrap 默认 files）；用原会话发送 PROMPT.txt
 python3 "$SKILL/scripts/chrome_chat.py" send --tab "$TAB_ID" --expected-url "$CHAT_URL" --prompt "$ROUND/PROMPT.txt" --receipt "$ROUND/browser-receipt.json"
 # 等待完整回复，确认精确标签可见，必要时关闭已核实的旧工具面板

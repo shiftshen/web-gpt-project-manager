@@ -4,9 +4,13 @@ from pathlib import Path
 import handoff as h
 
 
+def visible_prompt(text):
+    # Chrome renders Markdown code delimiters; preserve all substantive characters.
+    return re.sub(r'\s+',' ',re.sub(r'`+','',text)).strip()
+
 def parse_reply(text,req):
     blocks=re.findall(r'```(?:json)?\s*(\{.*?\})\s*```',text,re.S)
-    if not blocks: blocks=[text.strip()]
+    if not blocks: blocks=[re.sub(r'^(?:JSON|json)\s*\n','',text.strip())]
     decisions=[]
     for block in blocks:
         try: obj=json.loads(block)
@@ -34,8 +38,8 @@ def capture(tab,folder):
     starts=[i for i,m in enumerate(messages) if m['role']=='user' and marker in m['text']]
     if len(starts)!=1:raise ValueError('Missing/duplicate original round in visible conversation; inspect before capture')
     chain=messages[starts[0]:]
-    expected=re.sub(r'\s+',' ',(folder/'PROMPT.txt').read_text(encoding='utf-8')).strip()
-    if expected not in re.sub(r'\s+',' ',chain[0]['text']):raise ValueError('Visible request does not match prepared prompt')
+    expected=visible_prompt((folder/'PROMPT.txt').read_text(encoding='utf-8'))
+    if expected not in visible_prompt(chain[0]['text']):raise ValueError('Visible request does not match prepared prompt')
     for m in chain[1:]:
         if m['role']=='user' and ('FOLLOWUP_FOR: '+req['roundId']) not in m['text']:
             raise ValueError('Unrelated later user message; inspect correct conversation turn')
@@ -60,8 +64,8 @@ def verify(folder):
     if h.sha((folder/'SNAPSHOT.json').read_bytes())!=req['snapshotSha256'] or h.sha((folder/'HANDOFF.md').read_bytes())!=req['handoffSha256']:
         raise ValueError('Snapshot or handoff changed')
     messages=record['messages']
-    expected=re.sub(r'\s+',' ',(folder/'PROMPT.txt').read_text(encoding='utf-8')).strip()
-    if not messages or expected not in re.sub(r'\s+',' ',messages[0]['text']):raise ValueError('Captured request does not match prepared prompt')
+    expected=visible_prompt((folder/'PROMPT.txt').read_text(encoding='utf-8'))
+    if not messages or expected not in visible_prompt(messages[0]['text']):raise ValueError('Captured request does not match prepared prompt')
     if not messages or messages[0]['role']!='user' or ('ROUND_ID: '+req['roundId']) not in messages[0]['text'] or messages[-1]['role']!='assistant':raise ValueError('Invalid conversation chain')
     for m in messages[1:]:
         if m['role']=='user' and ('FOLLOWUP_FOR: '+req['roundId']) not in m['text']:raise ValueError('Unrelated followup')

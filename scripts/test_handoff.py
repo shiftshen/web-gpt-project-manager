@@ -96,6 +96,15 @@ class HandoffTests(unittest.TestCase):
         (self.root/'link').symlink_to(self.root/'src')
         with self.assertRaisesRegex(ValueError,'Symlink'): h.fingerprint(self.root,['link'])
 
+    def test_transient_composer_settles_without_reinserting(self):
+        with patch.object(b,'js',return_value={'draft':'expected\n\ntext','busy':False}) as js,patch.object(b.time,'sleep'):
+            b.settled_draft(1,'expected\ntext','partial')
+            self.assertEqual(js.call_count,1)
+
+    def test_real_composer_change_still_rejected(self):
+        with patch.object(b,'js',return_value={'draft':'different content','busy':False}),patch.object(b.time,'sleep'):
+            with self.assertRaisesRegex(RuntimeError,'mismatch'):b.settled_draft(1,'expected','different content')
+
     def test_busy_draft_duplicate_never_submit(self):
         args=argparse.Namespace(tab=1,prompt=str(self.round/'PROMPT.txt'),receipt=str(self.round/'receipt.json'))
         for state in [dict(busy=True,text='',draft='',hasEditor=True),dict(busy=False,text='',draft='user draft',hasEditor=True),dict(busy=False,text=self.req['roundId'],draft='',hasEditor=True)]:

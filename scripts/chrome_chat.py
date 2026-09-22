@@ -52,6 +52,18 @@ end repeat
 error "Target tab missing"
 end tell''')
 
+def settled_draft(tab,text,initial):
+    normalize=lambda value: re.sub(r"\n+", "\n", value.strip())
+    candidate=initial
+    for attempt in range(5):
+        if normalize(candidate)==normalize(text):return
+        if attempt==4:break
+        time.sleep(0.25)
+        state=js(tab,STATE)
+        if state.get('busy'):raise RuntimeError('Composer became busy; do not submit')
+        candidate=state.get('draft','')
+    raise RuntimeError('Composer text mismatch')
+
 def send(a):
     text=Path(a.prompt).read_text(encoding="utf-8")
     if len(text.encode())>24000: raise ValueError("Prompt too large")
@@ -74,7 +86,7 @@ def send(a):
 document.execCommand('insertText',false,TEXT);
 e.dispatchEvent(new Event('input',{bubbles:true}));
 return JSON.stringify({draft:e.innerText||e.value||''});})()""".replace("TEXT",json.dumps(text,ensure_ascii=False),1))
-        if re.sub(r"\n+", "\n", inserted["draft"].strip())!=re.sub(r"\n+", "\n", text.strip()): raise RuntimeError("Composer text mismatch")
+        settled_draft(a.tab,text,inserted["draft"])
         result=js(a.tab,r"""(()=>{const all=[...document.querySelectorAll('button')];
 if(all.some(e=>/^(停止回答|停止生成|Stop generating|Stop response)$/i.test(e.getAttribute('aria-label')||'')))return JSON.stringify({sent:false,reason:'busy'});
 const candidates=all.filter(e=>!e.disabled&&(e.dataset.testid==='send-button'||/^(发送提示词|发送消息|Send prompt|Send message)$/i.test(e.getAttribute('aria-label')||'')));

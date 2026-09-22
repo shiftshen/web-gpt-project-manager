@@ -22,6 +22,27 @@ class ChatTests(unittest.TestCase):
         messages=[{'role':'user','text':(folder/'PROMPT.txt').read_text(encoding='utf-8')},{'role':'assistant','text':'```json\n'+json.dumps(d)+'\n```'}]
         with patch('chrome_chat.js',side_effect=[{'url':req['chatUrl'],'busy':False},messages]),contextlib.redirect_stdout(io.StringIO()):chat.capture(1,folder)
 
+    def test_browser_rendered_code_blocks_and_inline_code_are_accepted(self):
+        self.bootstrap();folder=self.chat_round()
+        req=json.loads((folder/'REQUEST.json').read_text())
+        d={'roundId':folder.name,'status':'approved','reason':'fixture','nextTask':'next','acceptance':'check'}
+        original=(folder/'PROMPT.txt').read_text(encoding='utf-8')+'\nVerify `6/6` in ```text\nreport\n```'
+        (folder/'PROMPT.txt').write_text(original,encoding='utf-8')
+        messages=[{'role':'user','text':original.replace('`','')+' 展开'},
+                  {'role':'assistant','text':'JSON\n'+json.dumps(d)}]
+        with patch('chrome_chat.js',side_effect=[{'url':req['chatUrl'],'busy':False},messages]),contextlib.redirect_stdout(io.StringIO()):chat.capture(1,folder)
+        self.assertEqual(self.call(p.accept)['state']['status'],'ready')
+
+    def test_brief_preserves_full_report_but_sends_only_summary(self):
+        self.bootstrap()
+        self.report.write_text('Long evidence '*700,encoding='utf-8')
+        brief=self.base/'brief.md';brief.write_text('Short manager question',encoding='utf-8')
+        result=self.call(p.prepare,kind='stage',summary=str(self.report),brief=str(brief),files=['src'],transport='chat')
+        folder=Path(result['round'])
+        self.assertIn('Short manager question',(folder/'PROMPT.txt').read_text(encoding='utf-8'))
+        self.assertNotIn('Long evidence',(folder/'PROMPT.txt').read_text(encoding='utf-8'))
+        self.assertEqual((folder/'HANDOFF.md').read_bytes(),self.report.read_bytes())
+
     def test_chat_accept_without_pm_writing_any_files(self):
         self.bootstrap();folder=self.chat_round();self.capture(folder)
         self.assertEqual(list((folder/'outbox').iterdir()),[])
