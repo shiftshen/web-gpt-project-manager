@@ -1,5 +1,9 @@
 # Web GPT Project Manager
 
+DSH Web 可从项目的 `.dsh/skills/` 或 DSH 用户目录的 `skills/` 加载整个技能目录。使用已登录的 Ego Lite ChatGPT 页面时，按 [Ego 浏览器通道](references/browser.md#ego-lite-与-dsh-web) 记录真实会话、发送提示词和抓取阶段审核；网页经理独立读写项目仍需连接 WebCodex 并通过 bootstrap 探针。
+
+在 DSH Web 中选择目标项目工作区，开启新会话后输入“使用 web-gpt-project-manager 技能，按项目 `.gpt-pm/` 的交接提示词继续目标；执行代码与测试并在阶段末请求固定网页经理审核”。首次项目由主管先初始化 `.gpt-pm/`、配置 ChatGPT 连接并完成 bootstrap；DSH 开发者不能跳过握手自行批准阶段。DSH 页面地址与 ChatGPT 经理地址是两个独立会话。
+
 让本地 AI 写代码，让固定网页 GPT 做开发经理，用持久文件与验证证据连接每个阶段。**目标稳定，实施路线可以根据证据调整。**
 
 这是可安装的通用 Agent Skill 与 Python 标准库脚本，不是常驻服务，不会自动创建计时任务，也不提供免费模型额度。
@@ -67,7 +71,7 @@ Windows 使用 `python`。默认安装到 `~/.codex/skills/web-gpt-project-manag
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-CI 检查 Linux、macOS、Windows 的纯协议/状态逻辑；**不是三平台浏览器端到端验证**。附带 Chrome 自动化仅在 macOS 实测；其他系统需要宿主浏览器工具或人工辅助。
+CI 检查 Linux、macOS、Windows 的纯协议/状态逻辑；**不是三平台浏览器端到端验证**。Chrome 桥接仅在 macOS 实测；Ego Lite 桥接已在 macOS 真实登录页面验证读取，消息发送和完整经理流程以每项目实际握手为准。其他系统需在当地实测浏览器通道。
 
 历史真实 Chrome 测试已验证网页读本机、创建 nonce、写回 REVIEW；完整文档写回曾被平台安全检查拒绝。因此不宣称所有账号都已完成端到端全自动验证；每个新项目必须真实 bootstrap。人工辅助路径不是全自动模式。
 

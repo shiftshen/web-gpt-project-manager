@@ -11,7 +11,7 @@ description: 为任意项目建立四角色开发协作：Codex 主管规划架�
 
 1. 检查真实仓库指令、状态、授权和目标，不要求重复上传本机资料。按 [supervisor.md](references/supervisor.md) 完成章程/架构/动态里程碑。
 2. `project.py init` 创建 .gpt-pm；填真实内容，勿保留空模板冒充规划。旧 v2/v3 用 [迁移命令](references/recovery.md)，不手改状态、不覆盖活跃轮次。
-3. 创建或复用用户登录浏览器中的唯一固定经理；角色指令由 PM_INSTRUCTIONS 在 bootstrap 加载。先验证 WebCodex；配置入口和原作者致谢见 [setup.md](references/setup.md)。
+3. 创建或复用用户登录浏览器中的唯一固定经理；角色指令由 PM_INSTRUCTIONS 在 bootstrap 加载。用户指定 Ego 时使用 [Ego 桥接](references/browser.md#ego-lite-与-dsh-web)；先验证 WebCodex；配置入口和原作者致谢见 [setup.md](references/setup.md)。
 4. 模式/模型/档位分别记录 requested/observed。strict 遵守指定要求；有真实用户授权的 keep_existing 可保留 unknown 沿用当前会话，不切换、不升级。详见 [authority.md](references/authority.md)。
 5. 首次 bootstrap 通过真实文件 nonce + 完整回传 + 新鲜快照验证。已有有效握手直接复用；普通技能更新不重新握手。目标、模型策略或经理更换影响门槛时才按协议恢复。
 6. 固定交付：经理 URL → 第一段交接提示词 → 实际握手结果 → 第二段目标提示词。handoff_prompt 可先签发恢复提示；developer_prompt 只在握手有效且状态允许时输出两段文件。不得假称未完成的握手已通过。

@@ -29,6 +29,7 @@ MANAGER_CONFIG.json 保存 requested/observed 配置，纳入审核指纹。首�
 ## 启动会话与握手
 
 本地浏览器 `chrome_chat.py new` 创建项目专用标签；读取页面确认 Chat/Work 与模型，不改变用户偏好。已有 URL 使用 list 查找对应标签，不开重复会话。还没有标签时在新标签打开准确已绑定 URL。
+用户指定 Ego 时复用已登录的 task space 和受管 ChatGPT page，改用 [Ego 命令](browser.md#ego-lite-与-dsh-web) 发送与抓取；不得把 Ego 验证报告为 Chrome 验证。
 
 ```sh
 python3 "$SKILL/scripts/project.py" prepare --project "$PROJECT" --kind bootstrap --summary "$REPORT" --files README.md src tests

@@ -23,6 +23,6 @@
 
 ## 浏览器控制
 
-附带脚本仅支持 macOS Google Chrome，使用用户实际登录的可见标签，不读取 Cookie、不调用 ChatGPT 私有 API。需用户在 Chrome 中允许来自 Apple 事件的 JavaScript；登录、系统授权由用户完成。Windows/Linux 使用宿主的合法浏览器工具或人工转发，不能宣称附带脚本已在这些系统自动操控 Chrome。
+附带 `chrome_chat.py` 支持 macOS Google Chrome，使用用户实际登录的可见标签；`ego_chat.py` 支持已有 Ego Lite task space 中受管的 ChatGPT 页面。两者都不读取 Cookie、不调用 ChatGPT 私有 API。Chrome 需用户允许来自 Apple 事件的 JavaScript；Ego 与 Chrome 的登录会话隔离。登录和系统授权由用户完成。Windows/Linux 需在当地实测可用通道，不能把 macOS 验证推广到其他系统。
 
 没有浏览器控制时可手工发送生成的 PROMPT.txt，但这是人工辅助模式；不能称全自动。正式目标循环必须先验证所选实际通信方式。

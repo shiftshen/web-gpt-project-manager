@@ -25,15 +25,23 @@ def parse_reply(text,req):
     return d
 
 
-def capture(tab,folder):
-    import chrome_chat as browser
+def capture(tab,folder,browser_name='chrome',space=None,page=None):
+    if browser_name=='ego':
+        import ego_chat as browser
+        if space is None or not page:raise ValueError('Ego space and page required')
+        read=lambda code: browser.js(space,page,code)
+        producer='visible-ego-transcript'
+    else:
+        import chrome_chat as browser
+        read=lambda code: browser.js(tab,code)
+        producer='visible-chrome-transcript'
     folder=Path(folder).resolve(strict=True)
     req=json.loads((folder/'REQUEST.json').read_text(encoding='utf-8'))
     if req.get('transport')!='chat':raise ValueError('Not a chat decision round')
-    state=browser.js(tab,browser.STATE)
+    state=read(browser.STATE)
     if state['url']!=req['chatUrl']:raise ValueError('Wrong manager URL')
     if state['busy']:raise ValueError('Manager still responding; wait before capturing')
-    messages=browser.js(tab,"JSON.stringify([...document.querySelectorAll('[data-message-author-role]')].map(e=>({role:e.dataset.messageAuthorRole,text:e.innerText})))")
+    messages=read("JSON.stringify([...document.querySelectorAll('[data-message-author-role]')].map(e=>({role:e.dataset.messageAuthorRole,text:e.innerText})))")
     marker='ROUND_ID: '+req['roundId']
     starts=[i for i,m in enumerate(messages) if m['role']=='user' and marker in m['text']]
     if len(starts)!=1:raise ValueError('Missing/duplicate original round in visible conversation; inspect before capture')
@@ -45,7 +53,7 @@ def capture(tab,folder):
             raise ValueError('Unrelated later user message; inspect correct conversation turn')
     if not chain or chain[-1]['role']!='assistant':raise ValueError('No completed manager reply')
     parse_reply(chain[-1]['text'],req)
-    record={'schemaVersion':1,'producer':'visible-chrome-transcript','url':state['url'],
+    record={'schemaVersion':1,'producer':producer,'url':state['url'],
             'roundId':req['roundId'],'capturedAt':h.now(),'requestSha256':h.sha((folder/'REQUEST.json').read_bytes()),'messages':chain}
     target=folder/'CHAT_REPLY.json'
     with target.open('x',encoding='utf-8') as f:json.dump(record,f,ensure_ascii=False,indent=2)
@@ -58,7 +66,7 @@ def verify(folder):
         if (folder/name).is_symlink():raise ValueError('Symlink not allowed in chat evidence')
     req=json.loads((folder/'REQUEST.json').read_text(encoding='utf-8'))
     raw=(folder/'CHAT_REPLY.json').read_bytes();record=json.loads(raw)
-    if record.get('producer')!='visible-chrome-transcript' or record.get('url')!=req['chatUrl'] or record.get('roundId')!=req['roundId']:
+    if record.get('producer') not in ('visible-chrome-transcript','visible-ego-transcript') or record.get('url')!=req['chatUrl'] or record.get('roundId')!=req['roundId']:
         raise ValueError('Wrong conversation/round/provenance')
     if record.get('requestSha256')!=h.sha((folder/'REQUEST.json').read_bytes()):raise ValueError('Request changed after capture')
     if h.sha((folder/'SNAPSHOT.json').read_bytes())!=req['snapshotSha256'] or h.sha((folder/'HANDOFF.md').read_bytes())!=req['handoffSha256']:
@@ -84,7 +92,9 @@ def verify(folder):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--tab',type=int,required=True);p.add_argument('--round',required=True);a=p.parse_args()
-    try:capture(a.tab,a.round)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--tab',type=int);p.add_argument('--browser',choices=['chrome','ego'],default='chrome');p.add_argument('--space',type=int);p.add_argument('--page');p.add_argument('--round',required=True);a=p.parse_args()
+    try:
+        if a.browser=='chrome' and a.tab is None:raise ValueError('Chrome tab required')
+        capture(a.tab,a.round,a.browser,a.space,a.page)
     except (ValueError,OSError,KeyError,TypeError,RuntimeError) as e:print(str(e),file=sys.stderr);sys.exit(2)
 if __name__=='__main__':main()

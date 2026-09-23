@@ -1,5 +1,17 @@
 # 浏览器桥接
 
+## Ego Lite 与 DSH Web
+
+当开发者在 DSH Web 工作、网页经理使用已登录的 Ego Lite ChatGPT 标签时，复用同一个 task space，记录 `spaceId` 与已管理的 ChatGPT `page` 标签。不要新建空间恢复失败页面。`ego_chat.py` 只操作该页面，不读取 Cookie 或 ChatGPT 私有 API；Ego 与用户 Chrome 相互隔离。用户接管空间后停止自动操作。
+
+```sh
+python3 scripts/ego_chat.py read --space SPACE_ID --page PAGE_LABEL
+python3 scripts/ego_chat.py send --space SPACE_ID --page PAGE_LABEL --prompt /绝对路径/PROMPT.txt --receipt /绝对路径/browser-receipt.json --expected-url https://chatgpt.com/c/真实会话ID
+python3 scripts/chat_review.py --browser ego --space SPACE_ID --page PAGE_LABEL --round /绝对路径/rounds/轮次
+```
+
+首次 bootstrap 的 `send` 不传 `--expected-url`，发送后读回真实会话 URL 并用 `project.py bind`。发送结果不确定时检查页面，不删除 receipt 重发。阶段审核抓取可见 Ego 原文并记录 `visible-ego-transcript` 来源；bootstrap 仍须网页经理通过 WebCodex 写回真实 nonce 和完整 outbox。Ego 登录不等于 WebCodex 已连接。
+
 macOS 已登录的 Google Chrome 是本机实测路径。使用脚本不读取 Cookie、不调用 ChatGPT 私有 API、不提取账号令牌。Windows/Linux 用宿主浏览器工具按相同协议执行，未声称已实测这些浏览器平台。
 
 先运行 chrome_chat.py list，只列 ChatGPT 标签，使用返回的稳定 tabId；不要以“第一个窗口第几个标签”定位，用户切换窗口会改变顺序。

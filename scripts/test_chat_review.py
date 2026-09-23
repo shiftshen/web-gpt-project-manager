@@ -52,6 +52,17 @@ class ChatTests(unittest.TestCase):
         self.assertTrue((folder/'CHAT_ACCEPTED.json').exists())
         self.assertIn('bounded implementation',(self.root/'.gpt-pm/PLAN.md').read_text(encoding='utf-8'))
 
+    def test_ego_capture_accepts_visible_manager_decision(self):
+        self.bootstrap();folder=self.chat_round()
+        req=json.loads((folder/'REQUEST.json').read_text())
+        decision={'roundId':folder.name,'status':'approved','reason':'Ego review','nextTask':'next','acceptance':'check'}
+        messages=[{'role':'user','text':(folder/'PROMPT.txt').read_text(encoding='utf-8')},
+                  {'role':'assistant','text':'```json\n'+json.dumps(decision)+'\n```'}]
+        with patch('ego_chat.js',side_effect=[{'url':req['chatUrl'],'busy':False},messages]),contextlib.redirect_stdout(io.StringIO()):
+            chat.capture(None,folder,'ego',1,'p1')
+        self.assertEqual(json.loads((folder/'CHAT_REPLY.json').read_text())['producer'],'visible-ego-transcript')
+        self.assertEqual(self.call(p.accept)['state']['status'],'ready')
+
     def test_captured_chat_cannot_be_cancelled_as_unsent(self):
         self.bootstrap();folder=self.chat_round();self.capture(folder)
         with self.assertRaisesRegex(ValueError,'output'):
