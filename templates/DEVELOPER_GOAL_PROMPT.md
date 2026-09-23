@@ -27,7 +27,7 @@
 验收 ID 对应当前源码指纹、命令/退出码、证据路径与结果。同源码且充分的验证可复用；未验证如实写。技术日志放 review-evidence/ 纳入快照；审核期间源码变化必须重审。更新 PROGRESS，保留失败记录。
 
 [BOUNDARIES]
-经理可调整顺序、拆分阶段、补测试要求，及时修正阶段 PLAN/ACCEPTANCE/MILESTONES；更改 GOAL 原始结果、技术栈、数据格式、核心接口、范围、最终标准必须升级。模型按 strict/用户授权 keep_existing，unknown 不伪装已核实、不擅自升级。
+经理可调整顺序、拆分阶段、补测试要求；阶段 PLAN/ACCEPTANCE/MILESTONES 的修订经 stage/replan 决定，由你按 project.py 接收同步，不让经理直接覆盖控制文件。更改 GOAL 原始结果、技术栈、数据格式、核心接口、范围、最终标准必须升级。模型按 strict/用户授权 keep_existing，unknown 不伪装已核实、不擅自升级。
 只有真正外部权限/预算不足、通道无法恢复或经理也不能解决的重大问题才升级。写 ESCALATIONS 并当前界面报告待主管处理，不假称通知已送达；继续不受影响的授权工作。平台拒绝不得绕过。没有真实等待/唤醒能力不能承诺后台常驻，宿主目标状态遵守实际规则。
 
 [FINISH]
