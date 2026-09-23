@@ -137,7 +137,7 @@ def prepare(a):
         example={'roundId':folder.name,'status':'approved|changes_requested|blocked',
                  'reason':'简短理由','nextTask':'最多三项，含范围','acceptance':'验收命令/条件，由开发者执行'}
         if a.kind=='final':example['goalComplete']=False
-        prompt='你是项目经理，只判断、给方案和验收，不实施代码、不跑测试/构建、不写文件、不查大量资料。可在确有必要时读一个相关文件片段。先按以下场景和进度回答，通常 200–500 字。\n'
+        prompt='你是项目经理，只判断、规划、核验证据和验收，不实施代码、不写文件、不查大量资料。可在确有必要时读一个相关文件片段或运行聚焦验证，并注明实际命令与结果。先按以下场景和进度回答，通常 200–500 字。\n'
         prompt+='ROUND_ID: '+folder.name+'\n项目：'+str(root)+'\n类型：'+a.kind+'；原权限不变。\n'+summary+'\n'
         if a.kind=='consult':prompt+='这是诊断咨询，approved 只表示建议完整，不放行开发、不代替握手。\n'
         prompt+='直接回复一个简短 JSON 代码块，无需正文重复，供本地保存真实结论；不必调用 WebCodex 写文件。字段：'+json.dumps(example,ensure_ascii=False)+'\n'
@@ -310,7 +310,7 @@ def replace_manager(a):
 
 
 def default_config():
-    return {'requested':{'mode':'Work','model':'GPT-6','reasoning':'default'},
+    return {'requested':{'mode':'Work','model':'GPT-6 Sol','reasoning':'中'},
             'observed':None,'allowAutomaticUpgrade':False}
 
 def audit_evidence(a):

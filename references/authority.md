@@ -13,15 +13,15 @@
 
 ## 模型配置
 
-MANAGER_CONFIG.json 纳入审核控制文件指纹。requested 是本次用户选择，observed 是浏览器实际 UI 及检查证据，两者必须分开。模板默认 Work / GPT-6 / default（基础档意图），不保证任意账号存在相同名称。用户本次选择优先，实际 UI 不可辨认时记录 unknown，按下述验证策略处理，不猜档位，不自动升级 Pro/更贵模型。
+MANAGER_CONFIG.json 纳入审核控制文件指纹。requested 是本次用户选择，observed 是浏览器实际 UI 及检查证据，两者必须分开。模板默认 Work / GPT-6 Sol / 中（基础模型与界面默认推理档），不保证任意账号存在相同名称。用户本次选择优先，实际 UI 不可辨认时记录 unknown，按下述验证策略处理，不猜档位，不自动升级 Pro/更贵模型。
 
 在空闲边界记录配置（本命令不操作网页，必须先实际检查）：
 
 ```sh
-python3 scripts/project.py configure --project PROJECT --manager-idle --evidence UI-CHECK.md --mode Work --model GPT-6 --reasoning default --observed-mode Work --observed-model GPT-6 --observed-reasoning default
+python3 scripts/project.py configure --project PROJECT --manager-idle --evidence UI-CHECK.md --mode Work --model "GPT-6 Sol" --reasoning 中 --observed-mode Work --observed-model "GPT-6 Sol" --observed-reasoning 中
 ```
 
-不一致时先报告并解决；不得把 default 当作已证实的基础档。配置变更保留旧配置审计并重新 bootstrap。模型选择不提供额度保证，技能不声称可取得完整计费记录。
+不一致时先报告并解决；不得把模板默认值当作实际界面证据。配置变更保留旧配置审计并重新 bootstrap。模型选择不提供额度保证，技能不声称可取得完整计费记录。
 
 
 ## v0.3 验证策略与诊断通道
