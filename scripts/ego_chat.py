@@ -10,9 +10,12 @@ def invoke(data):
     source=f'globalThis.PM_EGO_ARGS={json.dumps(data,ensure_ascii=False)}; await import({json.dumps(script.as_uri())})'
     result=subprocess.run(['ego-browser','nodejs','-e',source],text=True,capture_output=True,timeout=60)
     if result.returncode:raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-    lines=[line for line in (result.stdout+'\n'+result.stderr).splitlines() if line.strip().startswith('{')]
-    if not lines:raise RuntimeError('Ego returned no page result')
-    return json.loads(lines[-1])
+    for line in reversed((result.stdout+'\n'+result.stderr).splitlines()):
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            continue
+    raise RuntimeError('Ego returned no page result')
 
 def js(space,page,code):
     return invoke({'action':'read','space':space,'page':page,'code':code})
@@ -26,7 +29,7 @@ def send(args):
     state=js(args.space,args.page,STATE)
     if not state['url'].startswith('https://chatgpt.com/'):raise ValueError('Wrong origin')
     if args.expected_url and state['url']!=args.expected_url:raise ValueError('Wrong project-manager URL')
-    round_visible=js(args.space,args.page,"JSON.stringify([...document.querySelectorAll('[data-message-author-role=\"user\"]')].some(e=>e.innerText.includes("+json.dumps(rid)+")))")
+    round_visible=js(args.space,args.page,"JSON.stringify(document.body.innerText.includes("+json.dumps(rid)+"))")
     if state['busy'] or state['draft'].strip() or round_visible or not state['hasEditor']:
         raise ValueError('Manager busy, draft present, round already visible, or composer missing')
     receipt=Path(args.receipt)
