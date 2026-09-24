@@ -71,7 +71,7 @@ Windows 使用 `python`。默认安装到 `~/.codex/skills/web-gpt-project-manag
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-CI 检查 Linux、macOS、Windows 的纯协议/状态逻辑；**不是三平台浏览器端到端验证**。Chrome 桥接仅在 macOS 实测。Ego Lite 桥接在 macOS 的 DSH Web 测试项目中完成了真实消息发送、WebCodex 项目读取、bootstrap nonce 写回、阶段审查、final 审查和本地协议接收；其他账号与系统仍须对各自项目完成真实 bootstrap。Ego 页面与用户 Chrome 隔离，且 DSH Web 没有内置的“一键呼叫网页经理”按钮：本技能通过项目脚本、Ego 页面和 WebCodex 串起流程，需要保留可用的浏览器任务空间与本机连接。
+CI 检查 Linux、macOS、Windows 的纯协议/状态逻辑；**不是三平台浏览器端到端验证**。Chrome 桥接仅在 macOS 实测。Ego Lite 桥接在 macOS 的 DSH Web 测试项目中完成了真实消息发送、WebCodex 项目读取、bootstrap nonce 写回、阶段审查、final 审查和本地协议接收；DSH 开发会话也直接调用 Ego 桥接发送只读探针，并核对了网页 GPT 经 WebCodex 读回的新建随机文件内容。其他账号与系统仍须对各自项目完成真实 bootstrap。Ego 页面与用户 Chrome 隔离，且 DSH Web 没有内置的“一键呼叫网页经理”按钮：本技能通过项目脚本、Ego 页面和 WebCodex 串起流程，需要保留可用的浏览器任务空间与本机连接。
 
 历史真实 Chrome 测试已验证网页读本机、创建 nonce、写回 REVIEW；完整文档写回曾被平台安全检查拒绝。因此不宣称所有账号都已完成端到端全自动验证；每个新项目必须真实 bootstrap。人工辅助路径不是全自动模式。
 
